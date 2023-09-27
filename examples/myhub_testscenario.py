@@ -27,14 +27,14 @@ def test_hub():
         "255.255.255.255"
     )
     s.expect(
-        PacketInputEvent("eth1", testpkt, display=Ethernet),
+        PacketInputEvent("eth0", testpkt, display=Ethernet),
         ("An Ethernet frame with a broadcast destination address "
-         "should arrive on eth1")
+         "should arrive on eth0")
     )
     s.expect(
-        PacketOutputEvent("eth0", testpkt, "eth2", testpkt, display=Ethernet),
+        PacketOutputEvent("eth1", testpkt, "eth2", testpkt, display=Ethernet),
         ("The Ethernet frame with a broadcast destination address should be "
-         "forwarded out ports eth0 and eth2")
+         "forwarded out ports eth1 and eth2")
     )
 
     # test case 2: a frame with any unicast address except one assigned to hub
@@ -92,6 +92,25 @@ def test_hub():
         ("The hub should not do anything in response to a frame arriving with"
          " a destination address referring to the hub itself.")
     )
+
+    # test case 4
+    reqpkt = new_packet(
+        "20:00:00:00:00:01",
+        "10:00:00:00:00:10",
+        '192.168.1.120',
+        '172.16.42.10'
+    )
+    s.expect(
+        PacketInputEvent("eth0", resppkt, display=Ethernet),
+        ("An Ethernet frame from 20:00:00:00:00:01 to 10:00:00:00:00:10 "
+         "should arrive on eth0")
+    )
+    s.expect(
+        PacketOutputEvent("eth1", resppkt, "eth2", resppkt, display=Ethernet),
+        ("Ethernet frame destined to 10:00:00:00:00:10 should be flooded out"
+         "eth1 and eth2")
+    )
+
     return s
 
 
