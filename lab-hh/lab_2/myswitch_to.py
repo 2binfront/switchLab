@@ -13,7 +13,8 @@ def main(net: switchyard.llnetbase.LLNetBase):
     my_interfaces = net.interfaces()
     mymacs = [intf.ethaddr for intf in my_interfaces]
 
-    switchTable={}
+    #list of (srcMac,srcPort,timestamp)
+    switchTable=[]
 
     while True:
         try:
@@ -24,7 +25,7 @@ def main(net: switchyard.llnetbase.LLNetBase):
             break
         else:
             log_info(f"incomePort:{fromIface} incomeMac:{packet.get_header(Ethernet).src}")
-            switchTable[packet.get_header(Ethernet).src]=fromIface
+            switchTable.append((packet.get_header(Ethernet).src,fromIface,timestamp))
         log_debug (f"In {net.name} received packet {packet} on {fromIface}")
         eth = packet.get_header(Ethernet)
         if eth is None:
