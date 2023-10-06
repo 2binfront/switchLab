@@ -7,14 +7,23 @@ that doesn't learn.)
 '''
 import switchyard
 from switchyard.lib.userlib import *
-
+import time
 
 def main(net: switchyard.llnetbase.LLNetBase):
     my_interfaces = net.interfaces()
     mymacs = [intf.ethaddr for intf in my_interfaces]
 
-    #list of (srcMac,srcPort,timestamp)
-    switchTable=[]
+    #mac:(interface,timestamp)
+    #if check timestamp when new packet'srcMac already exist in the table:
+    #   if same srcport:
+    #       reuse
+    #   else:
+    #       update
+    #else:
+    #   append new key-value map
+    #
+    #also check every item's curtime-timestamp>10s?del:nothing
+    switchTable={}
 
     while True:
         try:
@@ -24,8 +33,11 @@ def main(net: switchyard.llnetbase.LLNetBase):
         except Shutdown:
             break
         else:
-            log_info(f"incomePort:{fromIface} incomeMac:{packet.get_header(Ethernet).src}")
-            switchTable.append((packet.get_header(Ethernet).src,fromIface,timestamp))
+            t = time.time()
+            switchTable[packet.get_header(Ethernet).src]=(fromIface,t)
+            for mac in switchTable.keys():
+                if t-switchTable[mac][1]>=10:
+                    del switchTable[mac]
         log_debug (f"In {net.name} received packet {packet} on {fromIface}")
         eth = packet.get_header(Ethernet)
         if eth is None:
