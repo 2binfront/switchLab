@@ -41,6 +41,6 @@ def main(net: switchyard.llnetbase.LLNetBase):
                 for intf in my_interfaces:
                     if fromIface!= intf.name:
                         log_info (f"Flooding packet {packet} to {intf.name}")
-                        net.send_packet(intf, packet)
+                        net.send_packet(intf.name, packet)
 
     net.shutdown()

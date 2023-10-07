@@ -35,8 +35,8 @@ def main(net: switchyard.llnetbase.LLNetBase):
         else:
             t = time.time()
             switchTable[packet.get_header(Ethernet).src]=(fromIface,t)
-            for mac in switchTable.keys():
-                if t-switchTable[mac][1]>=10:
+            for mac in list(switchTable.keys()):
+                if t-switchTable[mac][1]>=5:
                     del switchTable[mac]
         log_debug (f"In {net.name} received packet {packet} on {fromIface}")
         eth = packet.get_header(Ethernet)
@@ -49,11 +49,11 @@ def main(net: switchyard.llnetbase.LLNetBase):
             #find the intf in switchTable
             if switchTable.get(eth.dst,False):
                 log_info(f"getResult:{switchTable.get(eth.dst,False)} sending packet {packet} to {switchTable[eth.dst]}")
-                net.send_packet(switchTable[eth.dst], packet)
+                net.send_packet(switchTable[eth.dst][0], packet)
             else:
                 for intf in my_interfaces:
                     if fromIface!= intf.name:
                         log_info (f"Flooding packet {packet} to {intf.name}")
-                        net.send_packet(intf, packet)
+                        net.send_packet(intf.name, packet)
 
     net.shutdown()
