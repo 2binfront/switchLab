@@ -30,12 +30,12 @@ def main(net: switchyard.llnetbase.LLNetBase):
                 switchTable[packet.get_header(Ethernet).src][0]=fromIface
             else:
                 if len(switchTable)==size:
-                    tmp=sorted(switchTable.items(),key=(lambda x:x[1][1]),reverse=True)
+                    tmp=sorted(switchTable.items(),key=(lambda x:x[1][1]))
                     del switchTable[tmp[0][0]]
                 switchTable[packet.get_header(Ethernet).src]=[fromIface,0]
-            for key in switchTable.keys():
-                if key!=packet.get_header(Ethernet).src:
-                    switchTable[key][1]+=1
+            # for key in switchTable.keys():
+            #     if key!=packet.get_header(Ethernet).src:
+            #         switchTable[key][1]+=1
 
 
 
@@ -50,7 +50,7 @@ def main(net: switchyard.llnetbase.LLNetBase):
             #find the intf in switchTable
             if switchTable.get(eth.dst,False):
                 log_info(f"getResult:{switchTable.get(eth.dst,False)} sending packet {packet} to {switchTable[eth.dst]}")
-                switchTable[eth.dst][1]=0
+                switchTable[eth.dst][1]+=1
                 net.send_packet(switchTable[eth.dst][0], packet)
             else:
                 for intf in my_interfaces:

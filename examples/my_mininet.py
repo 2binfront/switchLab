@@ -1,4 +1,4 @@
-#!/usr/bin/python
+
 
 import sys
 
@@ -31,9 +31,25 @@ nodes = {
         "mac": "20:00:00:00:00:{:02x}",#1
         "ip": "192.168.100.2/24"
     },
-    "client": {
-        "mac": "30:00:00:00:00:{:02x}",#1
+    "client1": {
+        "mac": "30:00:00:00:01:{:02x}",#1
         "ip": "192.168.100.3/24"
+    },
+        "client2": {
+        "mac": "30:00:00:00:02:{:02x}",#2
+        "ip": "192.168.100.4/24"
+    },    "client3": {
+        "mac": "30:00:00:00:03:{:02x}",#3
+        "ip": "192.168.100.5/24"
+    },    "client4": {
+        "mac": "30:00:00:00:04:{:02x}",#4
+        "ip": "192.168.100.6/24"
+    },    "client5": {
+        "mac": "30:00:00:00:05:{:02x}",#5
+        "ip": "192.168.100.7/24"
+    },    "client6": {
+        "mac": "30:00:00:00:06:{:02x}",#6
+        "ip": "192.168.100.8/24"
     },
     "hub": {
         "mac": "40:00:00:00:00:{:02x}",#1,2
@@ -52,7 +68,7 @@ class PySwitchTopo(Topo):
         #
         #   server1 
         #          \
-        #           hub----client
+        #           hub----client1，2，3，4，5，6
         #          /
         #   server2 
         #
@@ -92,6 +108,7 @@ def set_route(net, fromnode, prefix, nextnode):
 
 
 def setup_addressing(net):
+    print(nodes.items())
     for node, config in nodes.items():
         reset_macs(net, node, config["mac"])
         if node != "hub":
@@ -105,6 +122,7 @@ def disable_ipv6(net):
 
 
 def main():
+    print("Python:", sys.version)
     topo = PySwitchTopo(args)
     net = Mininet(controller=None, topo=topo, link=TCLink, cleanup=True)
     setup_addressing(net)
