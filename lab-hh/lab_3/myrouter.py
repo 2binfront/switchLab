@@ -15,9 +15,10 @@ class Router(object):
         # other initialization stuff here
 
     def handle_packet(self, recv: switchyard.llnetbase.ReceivedPacket):
-        timestamp, ifaceName, packet = recv
+        timestamp, ifName, packet = recv
         # TODO: your logic here
-        ...
+        arp = packet.get_header(Arp)
+
 
     def start(self):
         '''A running daemon of the router.
