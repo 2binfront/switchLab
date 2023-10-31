@@ -81,7 +81,7 @@ class PySwitchTopo(Topo):
             # all links are 10Mb/s, 100 millisecond prop delay
             if node != "hub":
                 self.addLink(node, "hub", bw=10, delay="100ms")
-
+  
 
 def set_ip(net, node1, node2, ip):
     node1 = net.get(node1)
