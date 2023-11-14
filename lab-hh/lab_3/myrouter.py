@@ -13,11 +13,16 @@ class Router(object):
     def __init__(self, net: switchyard.llnetbase.LLNetBase):
         self.net = net
         # other initialization stuff here
+        self.portsList=net.interfaces()
 
     def handle_packet(self, recv: switchyard.llnetbase.ReceivedPacket):
         timestamp, ifName, packet = recv
         # TODO: your logic here
         arp = packet.get_header(Arp)
+        for port in self.portsList:
+            if port.ethaddr==arp.targethwaddr:
+                rePacket=Packet()
+                rePacket+=Arp()
 
 
     def start(self):
