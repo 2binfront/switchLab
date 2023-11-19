@@ -67,7 +67,7 @@ def reset_macs(net, node, macbase):
         ifnum += 1
 
     for intf in node_object.intfList():
-        print node,intf,node_object.MAC(intf)
+        print(node,intf,node_object.MAC(intf))
 
 def set_route(net, fromnode, prefix, gw):
     node_object = net.get(fromnode)
