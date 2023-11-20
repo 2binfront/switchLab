@@ -19,10 +19,25 @@ class Router(object):
         timestamp, ifName, packet = recv
         # TODO: your logic here
         arp = packet.get_header(Arp)
-        for port in self.portsList:
-            if port.ethaddr==arp.targethwaddr:
-                rePacket=Packet()
-                rePacket+=Arp()
+        if arp:
+            for port in self.portsList:
+                if arp.targetprotoaddr == port.ipaddr:
+                    rePacket = Ethernet()
+                    rePacket.src = port.ethaddr
+                    rePacket.dst = arp.senderhwaddr
+                    rePacket.ethertype = EtherType.ARP
+                    rePacket+=Arp(
+                        #reply type
+                        operation=ArpOperation.Reply,
+                        #router port ethaddr
+                        senderhwaddr=port.ethaddr,
+                        #router port ip
+                        senderprotoaddr=port.ipaddr,
+                        #original arp request hwaddr
+                        targethwaddr=arp.senderhwaddr,
+                        #original arp request ipaddr
+                        targetprotoaddr= arp.senderprotoaddr)
+                    self.net.send_packet(ifName,rePacket)
 
 
     def start(self):
