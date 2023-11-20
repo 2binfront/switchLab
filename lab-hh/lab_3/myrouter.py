@@ -18,8 +18,12 @@ class Router(object):
     def handle_packet(self, recv: switchyard.llnetbase.ReceivedPacket):
         timestamp, ifName, packet = recv
         # TODO: your logic here
+        arpTable={}
         arp = packet.get_header(Arp)
         if arp:
+            arpTable[arp.senderprotoaddr]=arp.senderhwaddr
+            for key,val in arpTable:
+                print(key,' arp pair ',val)
             for port in self.portsList:
                 if arp.targetprotoaddr == port.ipaddr:
                     rePacket = Ethernet()
