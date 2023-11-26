@@ -22,7 +22,7 @@ class Router(object):
         arp = packet.get_header(Arp)
         if arp:
             arpTable[arp.senderprotoaddr]=arp.senderhwaddr
-            for key,val in arpTable:
+            for key,val in arpTable.items():
                 print(key,' arp pair ',val)
             for port in self.portsList:
                 if arp.targetprotoaddr == port.ipaddr:
