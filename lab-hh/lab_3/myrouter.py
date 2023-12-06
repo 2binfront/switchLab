@@ -8,6 +8,19 @@ import time
 import switchyard
 from switchyard.lib.userlib import *
 
+class TableRow:
+    def __init__(self,prefix,mask,nextHop,portName):
+        self.prefix=prefix
+        self.mask=mask
+        self.nextHop=nextHop        
+        self.portName=portName
+
+
+# 核心是想明白如何把来数据包的ip与表项逐项比对寻找出最长前缀匹配，
+# python内置有 IPv4Network IPv4Address对象
+# 前者用于整合ip地址和mask，快捷得出mask位数；后者用于与int()结合快速掩码ip，并进行ip比对
+# 那么比对流程就是循环每个 TableRow,逐个寻找符合最长前缀匹配的表项，若符合再比较掩码位数，
+# 记住并更新最长前缀匹配表项index。不存在则为初始值-1
 
 class Router(object):
     def __init__(self, net: switchyard.llnetbase.LLNetBase):
