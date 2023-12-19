@@ -9,15 +9,6 @@ import switchyard
 import ipaddress
 from switchyard.lib.userlib import *
 
-class TableRow:
-    def __init__(self,prefix,mask,nextHop,portName):
-        self.subnet=IPv4Network(f'{prefix}/{mask}')
-
-        self.prefix=IPv4Address(prefix)
-        self.mask=IPv4Address(mask)
-        self.nextHop=IPv4Address(nextHop)        
-        self.portName=portName
-
 
 # 核心是想明白如何把来数据包的ip与表项逐项比对寻找出最长前缀匹配，
 # python内置有 IPv4Network IPv4Address对象
@@ -31,6 +22,17 @@ class TableRow:
 # 匹配到对应项后，IP header中TTL值-1，暂时不管过期
 # 生成一个新的ethernet header，要根据next hop值来设置目标mac值。
 # next hop的值不存在时需要生成arp query向其他人询问
+
+
+class TableRow:
+    def __init__(self,prefix,mask,nextHop,portName):
+        self.subnet=IPv4Network(f'{prefix}/{mask}')
+
+        self.prefix=IPv4Address(prefix)
+        self.mask=IPv4Address(mask)
+        self.nextHop=IPv4Address(nextHop)        
+        self.portName=portName
+
 
 class Router(object):
     def __init__(self, net: switchyard.llnetbase.LLNetBase):
@@ -97,7 +99,14 @@ class Router(object):
                 continue
             if tarIndex!=-1:
                 IPv4Header.ttl-=1
+                #if arp cache hit
                 if (self.table[tarIndex].nextHop) in arpTable.keys():
+                    EthernetHeader.dst=arpTable[self.table[tarIndex].nextHop]
+                    newPacket=packet+IPv4Header+EthernetHeader
+                    self.net.send_packet(self.table[tarIndex].portName,newPacket)
+                #if not hit
+                else:
+                    #TODO generate arp query and push unfinished packet into queue
 
                     
                 
