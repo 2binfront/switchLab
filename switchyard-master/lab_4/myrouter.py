@@ -110,9 +110,9 @@ class Router(object):
                             ether.ethertype = EtherType.ARP            
                             arp = Arp(operation=ArpOperation.Request,senderhwaddr=port.ethaddr,senderprotoaddr=port.ipaddr,targethwaddr='ff:ff:ff:ff:ff:ff',targetprotoaddr=targetip)
                             arppacket = ether + arp    
-                            print("send requests",port) 
+                            print("send requests",port)
                             self.net.send_packet(port, arppacket)
-                            q[0].ci+=1 
+                            q[0].ci+=1
                             q[0].time=time.time()
                             print(q[0].time) 
             gotpkt = True

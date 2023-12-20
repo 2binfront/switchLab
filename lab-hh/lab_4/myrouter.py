@@ -6,7 +6,6 @@ Basic IPv4 router (static routing) in Python.
 
 import time
 import switchyard
-import ipaddress
 from switchyard.lib.userlib import *
 
 
@@ -30,9 +29,16 @@ class TableRow:
 
         self.prefix=IPv4Address(prefix)
         self.mask=IPv4Address(mask)
-        self.nextHop=IPv4Address(nextHop)        
-        self.portName=portName
-
+        self.nextHop=IPv4Address(nextHop) 
+        self.portName=portName       
+   
+class UnfinishedPacket:
+    def __init__(self,pkt,tableRow) -> None:
+        self.pkt=pkt
+        self.tableRow=tableRow
+        self.reCalls=0
+        self.time=time.time()
+        
 
 class Router(object):
     def __init__(self, net: switchyard.llnetbase.LLNetBase):
@@ -40,6 +46,7 @@ class Router(object):
         # other initialization stuff here
         self.portsList=net.interfaces()
         self.generateTable()
+        self.queue=[]
 
     def generateTable(self):
         table=[]
@@ -51,13 +58,19 @@ class Router(object):
                 line = fd.readline()
         for port in self.net.portsList:
             table.append(TableRow(port.ipaddr,port.netmask,None,port.name))
-
         self.table=table
+
+        arpTable={}
+        for port in self.portsList:
+            arpTable[port.ipaddr]=port.ethaddr
+        self.arpTable=arpTable
+
+
+
 
     def handle_packet(self, recv: switchyard.llnetbase.ReceivedPacket):        
         timestamp, ifName, packet = recv
         # TODO: your logic here
-        arpTable={}
         arp = packet.get_header(Arp)
 
         EthernetHeader=packet.get_header(Ethernet)
@@ -65,27 +78,29 @@ class Router(object):
 
         # search arp table if is arp query packet
         if arp:
-            arpTable[arp.senderprotoaddr]=arp.senderhwaddr
-            # for key,val in arpTable.items():
+            self.arpTable[arp.senderprotoaddr]=arp.senderhwaddr
+            # for key,val in self.arpTable.items():
             #     print(key,' arp pair ',val)
-            for port in self.portsList:
-                if arp.targetprotoaddr == port.ipaddr:
+
+            if arp.operation==ArpOperation.Request:
+                if self.arpTable[arp.targetprotoaddr]:
                     rePacket = Ethernet()
-                    rePacket.src = port.ethaddr
+                    rePacket.src =self.arpTable[arp.targetprotoaddr]
                     rePacket.dst = arp.senderhwaddr
                     rePacket.ethertype = EtherType.ARP
                     rePacket+=Arp(
                         #reply type
                         operation=ArpOperation.Reply,
                         #router port ethaddr
-                        senderhwaddr=port.ethaddr,
+                        senderhwaddr=self.arpTable[arp.targetprotoaddr],
                         #router port ip
-                        senderprotoaddr=port.ipaddr,
+                        senderprotoaddr=arp.targetprotoaddr,
                         #original arp request hwaddr
                         targethwaddr=arp.senderhwaddr,
                         #original arp request ipaddr
                         targetprotoaddr= arp.senderprotoaddr)
                     self.net.send_packet(ifName,rePacket)
+            # elif arp.operation==ArpOperation.Reply:
 
         # search forwarding table if not arp query
         elif IPv4Header:
@@ -100,13 +115,14 @@ class Router(object):
             if tarIndex!=-1:
                 IPv4Header.ttl-=1
                 #if arp cache hit
-                if (self.table[tarIndex].nextHop) in arpTable.keys():
-                    EthernetHeader.dst=arpTable[self.table[tarIndex].nextHop]
+                if (self.table[tarIndex].nextHop) in self.arpTable.keys():
+                    EthernetHeader.dst=self.arpTable[self.table[tarIndex].nextHop]
                     newPacket=packet+IPv4Header+EthernetHeader
                     self.net.send_packet(self.table[tarIndex].portName,newPacket)
                 #if not hit
                 else:
-                    #TODO generate arp query and push unfinished packet into queue
+                    #TODO generate arp query and put unfinished packet into queue
+                    queue.append()
 
                     
                 

@@ -22,6 +22,8 @@ class Router(object):
         arp = packet.get_header(Arp)
         if arp:
             arpTable[arp.senderprotoaddr]=arp.senderhwaddr
+            log_info(f'cur arptable:{arpTable} \n')
+
             for key,val in arpTable.items():
                 print(key,' arp pair ',val)
             for port in self.portsList:
