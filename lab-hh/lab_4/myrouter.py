@@ -25,17 +25,25 @@ from switchyard.lib.userlib import *
 
 class TableRow:
     def __init__(self,prefix,mask,nextHop,portName):
-        self.subnet=IPv4Network(f'{prefix}/{mask}')
 
         self.prefix=IPv4Address(prefix)
         self.mask=IPv4Address(mask)
-        self.nextHop=IPv4Address(nextHop) 
+        self.prefix=IPv4Address(int(self.prefix)&int(self.mask))
+        self.subnet=IPv4Network(f'{self.prefix}/{mask}')
+        if nextHop:
+            self.nextHop=IPv4Address(nextHop) 
+        else:
+            self.nextHop=None
         self.portName=portName       
    
 class UnfinishedPacket:
-    def __init__(self,pkt,tableRow) -> None:
+    def __init__(self,pkt,tableRow,tarIP:None) -> None:
         self.pkt=pkt
-        self.tableRow=tableRow
+        if tarIP:
+            self.tarIP=tarIP
+        else:
+            self.tarIP=tableRow.nextHop
+        self.portName=tableRow.portName
         self.reCalls=0
         self.time=time.time()
         
@@ -45,96 +53,172 @@ class Router(object):
         self.net = net
         # other initialization stuff here
         self.portsList=net.interfaces()
-        self.generateTable()
         self.queue=[]
+
+    def sendArpPktRequest(self,operation,tarIP,ifname):
+        for port in self.portsList:
+            if port.name==ifname:
+                curport=port
+        rePacket = Ethernet()
+        rePacket.src =curport.ethaddr
+        rePacket.dst = 'ff:ff:ff:ff:ff:ff'
+        rePacket.ethertype = EtherType.ARP
+        rePacket+=Arp(
+            #reply type
+            operation=operation,
+            #router port ethaddr
+            senderhwaddr=curport.ethaddr,
+            #router port ip
+            senderprotoaddr=curport.ipaddr,
+            #original arp request hwaddr
+            targethwaddr='ff:ff:ff:ff:ff:ff',
+            #original arp request ipaddr
+            targetprotoaddr= tarIP)
+        self.net.send_packet(ifname,rePacket)
+
+    def sendArpPktReply(self,operation,senderIP,senderhwaddr,tarIP,tarhwaddr,ifname):
+        rePacket = Ethernet()
+        rePacket.src =senderhwaddr
+        rePacket.dst = tarhwaddr
+        rePacket.ethertype = EtherType.ARP
+        rePacket+=Arp(
+            #reply type
+            operation=operation,
+            #router port ethaddr
+            senderhwaddr=senderhwaddr,
+            #router port ip
+            senderprotoaddr=senderIP,
+            #original arp request hwaddr
+            targethwaddr=tarhwaddr,
+            #original arp request ipaddr
+            targetprotoaddr= tarIP)
+        self.net.send_packet(ifname,rePacket)
 
     def generateTable(self):
         table=[]
+        # log_info(f'opening forwarding_table \n')
+
         with open('forwarding_table.txt', 'r') as fd:
+            # log_info(f'opening forwarding_table {fd}\n')
             line = fd.readline()
             while line:
                 rowList=line.split(' ')
                 table.append(TableRow(rowList[0],rowList[1],rowList[2],rowList[3]))
                 line = fd.readline()
-        for port in self.net.portsList:
+
+        for port in self.portsList:
             table.append(TableRow(port.ipaddr,port.netmask,None,port.name))
         self.table=table
-
         arpTable={}
         for port in self.portsList:
             arpTable[port.ipaddr]=port.ethaddr
         self.arpTable=arpTable
 
-
-
-
     def handle_packet(self, recv: switchyard.llnetbase.ReceivedPacket):        
         timestamp, ifName, packet = recv
+        log_info(f'got newpkt {packet} from {ifName}\n')
         # TODO: your logic here
         arp = packet.get_header(Arp)
-
-        EthernetHeader=packet.get_header(Ethernet)
         IPv4Header=packet.get_header(IPv4)
 
         # search arp table if is arp query packet
-        if arp:
+        if packet.has_header(Arp):
+            # log_info(f'got arp pkt {arp.operation}\n')
             self.arpTable[arp.senderprotoaddr]=arp.senderhwaddr
             # for key,val in self.arpTable.items():
             #     print(key,' arp pair ',val)
 
             if arp.operation==ArpOperation.Request:
-                if self.arpTable[arp.targetprotoaddr]:
-                    rePacket = Ethernet()
-                    rePacket.src =self.arpTable[arp.targetprotoaddr]
-                    rePacket.dst = arp.senderhwaddr
-                    rePacket.ethertype = EtherType.ARP
-                    rePacket+=Arp(
-                        #reply type
-                        operation=ArpOperation.Reply,
-                        #router port ethaddr
-                        senderhwaddr=self.arpTable[arp.targetprotoaddr],
-                        #router port ip
-                        senderprotoaddr=arp.targetprotoaddr,
-                        #original arp request hwaddr
-                        targethwaddr=arp.senderhwaddr,
-                        #original arp request ipaddr
-                        targetprotoaddr= arp.senderprotoaddr)
-                    self.net.send_packet(ifName,rePacket)
-            # elif arp.operation==ArpOperation.Reply:
+                if arp.targetprotoaddr in self.arpTable.keys():
+                    self.sendArpPktReply(ArpOperation.Reply,arp.targetprotoaddr,self.arpTable[arp.targetprotoaddr],arp.senderprotoaddr,arp.senderhwaddr,ifName)
+            elif arp.operation==ArpOperation.Reply:
+                self.arpTable[arp.targetprotoaddr]=arp.targethwaddr
 
         # search forwarding table if not arp query
-        elif IPv4Header:
+        elif packet.has_header(IPv4):
+            # log_info(f'got ip pkt {IPv4Header}\n')
             tarIndex=-1
             maxMask=0
             for index,row in enumerate(self.table):
-                if IPv4Address(IPv4Header.src) in row.subnet and row.subnet.prefixlen>maxMask:
+                # log_info(f'finding {index} and {row.subnet}')
+                if IPv4Address(IPv4Header.dst) in row.subnet and row.subnet.prefixlen>maxMask:
                     maxMask=row.subnet.prefixlen 
                     tarIndex=index
-                    log_info(f'found target {index}')
-                continue
+                    log_info(f'found target {IPv4Header.src} and {row.subnet}')
+            log_info(f'targetIndex {tarIndex}')
             if tarIndex!=-1:
-                IPv4Header.ttl-=1
+                log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
+                log_info(f'IPv4Header={str(IPv4Header)}')
+                packet[IPv4].ttl-=1
+                log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
+
+                if not self.table[tarIndex].nextHop:
+                    log_info(f'table detail:{self.table[tarIndex].portName,self.table[tarIndex].subnet,self.table[tarIndex].nextHop}')
+                    log_info(f'rcsv detail:{ifName}\n')
+
+                    self.sendArpPktRequest(ArpOperation.Request,IPv4Header.dst,self.table[tarIndex].portName)
+                    self.queue.append(UnfinishedPacket(packet,self.table[tarIndex],IPv4Header.dst))
+
                 #if arp cache hit
-                if (self.table[tarIndex].nextHop) in self.arpTable.keys():
-                    EthernetHeader.dst=self.arpTable[self.table[tarIndex].nextHop]
-                    newPacket=packet+IPv4Header+EthernetHeader
-                    self.net.send_packet(self.table[tarIndex].portName,newPacket)
+                elif (self.table[tarIndex].nextHop) in self.arpTable.keys():
+                    for port in self.portsList:
+                        if port.name==self.table[tarIndex].portName:
+                            curport=port
+                    packet[Ethernet].src=curport.ethaddr
+                    packet[Ethernet].dst=self.arpTable[self.table[tarIndex].nextHop]
+                    log_info(f'sending packet={str(packet)}')
+
+                    self.net.send_packet(self.table[tarIndex].portName,packet)
                 #if not hit
                 else:
                     #TODO generate arp query and put unfinished packet into queue
-                    queue.append()
-
-                    
-                
+                    log_info(f'table detail:{self.table[tarIndex].portName}\n')
+                    log_info(f'rcsv detail:{ifName}\n')
+                    self.sendArpPktRequest(ArpOperation.Request,self.table[tarIndex].nextHop,self.table[tarIndex].portName)
+                    self.queue.append(UnfinishedPacket(packet,self.table[tarIndex]))
         else:
-            log_failure('no IP header found')
+            log_failure('no valid header found')
+        log_info('arptable as follows')
+        for (k,v) in self.arpTable.items(): 
+            print (f'{ k,v}') 
+        log_info('table as follows')
+        for item in self.table: 
+            print (f'{item.subnet,item.nextHop,item.portName}') 
 
+    def handle_queue(self):
+        i=0
+        while i< len(self.queue):
+            item=self.queue[i]
+            log_info(f'cur item={item.tarIP}')
+            if item.tarIP in self.arpTable.keys():
+                for port in self.portsList:
+                    if port.name==item.portName:
+                        curport=port
+                item.pkt[Ethernet].src=curport.ethaddr
+                item.pkt[Ethernet].dst=self.arpTable[item.tarIP]
+                self.net.send_packet(item.portName,item.pkt)
+                self.queue.pop(i)
+                i+=1
+                continue
+            if item.reCalls>5:
+                self.queue.pop(i)
+            else:
+                if time.time()- item.time>1:
+                    self.sendArpPktRequest(ArpOperation.Request,item.tarIP,item.portName)
+                    item.reCalls+=1
+                    item.time=time.time()
+            i+=1
+            log_info(f'i={i,len(self.queue)}')
+
+            
 
 
     def start(self):
         '''A running daemon of the router.
         Receive packets until the end of time.
         '''
+        self.generateTable()
+    
         while True:
             try:
                 recv = self.net.recv_packet(timeout=1.0)
@@ -143,7 +227,11 @@ class Router(object):
             except Shutdown:
                 break
 
+            # self.handle_queue()
             self.handle_packet(recv)
+            self.handle_queue()
+
+            #todo handle the queue
 
         self.stop()
 
