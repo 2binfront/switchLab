@@ -45,7 +45,8 @@ class UnfinishedPacket:
             self.tarIP=tableRow.nextHop
         self.portName=tableRow.portName
         self.reCalls=0
-        self.time=time.time()
+        # self.time=time.time()
+        self.time=0
         
 
 class Router(object):
@@ -56,9 +57,12 @@ class Router(object):
         self.queue=[]
 
     def sendArpPktRequest(self,operation,tarIP,ifname):
+        log_info(f'port={ifname,len(ifname.rstrip())}\n')
         for port in self.portsList:
-            if port.name==ifname:
+            if port.name==ifname.rstrip() or port.name==ifname:
                 curport=port
+                log_info(f'curport exist:{curport}')
+
         rePacket = Ethernet()
         rePacket.src =curport.ethaddr
         rePacket.dst = 'ff:ff:ff:ff:ff:ff'
@@ -74,7 +78,9 @@ class Router(object):
             targethwaddr='ff:ff:ff:ff:ff:ff',
             #original arp request ipaddr
             targetprotoaddr= tarIP)
-        self.net.send_packet(ifname,rePacket)
+        log_info(f'curport exist again:{curport.name,rePacket}')
+
+        self.net.send_packet(curport.name,rePacket)
 
     def sendArpPktReply(self,operation,senderIP,senderhwaddr,tarIP,tarhwaddr,ifname):
         rePacket = Ethernet()
@@ -92,7 +98,7 @@ class Router(object):
             targethwaddr=tarhwaddr,
             #original arp request ipaddr
             targetprotoaddr= tarIP)
-        self.net.send_packet(ifname,rePacket)
+        self.net.send_packet(ifname.rstrip(),rePacket)
 
     def generateTable(self):
         table=[]
@@ -147,35 +153,41 @@ class Router(object):
                     log_info(f'found target {IPv4Header.src} and {row.subnet}')
             log_info(f'targetIndex {tarIndex}')
             if tarIndex!=-1:
-                log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
+                # log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
                 log_info(f'IPv4Header={str(IPv4Header)}')
                 packet[IPv4].ttl-=1
-                log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
+                # log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
 
                 if not self.table[tarIndex].nextHop:
-                    log_info(f'table detail:{self.table[tarIndex].portName,self.table[tarIndex].subnet,self.table[tarIndex].nextHop}')
                     log_info(f'rcsv detail:{ifName}\n')
+                    nextIP=IPv4Header.dst
+                else:
+                    nextIP=self.table[tarIndex].nextHop
 
-                    self.sendArpPktRequest(ArpOperation.Request,IPv4Header.dst,self.table[tarIndex].portName)
-                    self.queue.append(UnfinishedPacket(packet,self.table[tarIndex],IPv4Header.dst))
+                    # self.sendArpPktRequest(ArpOperation.Request,IPv4Header.dst,self.table[tarIndex].portName)
+                    # self.queue.append(UnfinishedPacket(packet,self.table[tarIndex],IPv4Header.dst))
 
                 #if arp cache hit
-                elif (self.table[tarIndex].nextHop) in self.arpTable.keys():
+                if nextIP in self.arpTable.keys():
                     for port in self.portsList:
                         if port.name==self.table[tarIndex].portName:
                             curport=port
+
+                    if not curport:
+                        log_failure(f'curport not exist')
+
                     packet[Ethernet].src=curport.ethaddr
-                    packet[Ethernet].dst=self.arpTable[self.table[tarIndex].nextHop]
+                    packet[Ethernet].dst=self.arpTable[nextIP]
                     log_info(f'sending packet={str(packet)}')
 
                     self.net.send_packet(self.table[tarIndex].portName,packet)
                 #if not hit
                 else:
                     #TODO generate arp query and put unfinished packet into queue
-                    log_info(f'table detail:{self.table[tarIndex].portName}\n')
-                    log_info(f'rcsv detail:{ifName}\n')
-                    self.sendArpPktRequest(ArpOperation.Request,self.table[tarIndex].nextHop,self.table[tarIndex].portName)
-                    self.queue.append(UnfinishedPacket(packet,self.table[tarIndex]))
+                    log_info(f'rcsv port:{ifName}\n')
+                    log_info(f'finding port:{self.table[tarIndex].portName}\n')
+                    # self.sendArpPktRequest(ArpOperation.Request,nextIP,self.table[tarIndex].portName)
+                    self.queue.append(UnfinishedPacket(packet,self.table[tarIndex],nextIP))
         else:
             log_failure('no valid header found')
         log_info('arptable as follows')
@@ -187,28 +199,35 @@ class Router(object):
 
     def handle_queue(self):
         i=0
-        while i< len(self.queue):
+        # while i< len(self.queue): 
+        
+        # single thread
+        if len(self.queue):
             item=self.queue[i]
             log_info(f'cur item={item.tarIP}')
             if item.tarIP in self.arpTable.keys():
                 for port in self.portsList:
-                    if port.name==item.portName:
+                    log_info(f'{len(port.name),len(item.portName)}')
+                    if port.name==item.portName or port.name==item.portName.rstrip():
                         curport=port
+
                 item.pkt[Ethernet].src=curport.ethaddr
                 item.pkt[Ethernet].dst=self.arpTable[item.tarIP]
-                self.net.send_packet(item.portName,item.pkt)
-                self.queue.pop(i)
-                i+=1
-                continue
-            if item.reCalls>5:
-                self.queue.pop(i)
+                self.net.send_packet(curport.name,item.pkt)
+                del(self.queue[i])
+                # i+=1
+                # continue
+            if item.reCalls>=5:
+                del(self.queue[i])
             else:
-                if time.time()- item.time>1:
+                curTime=time.time()
+                if curTime - item.time>1 or item.reCalls==0:
+                    log_info(f'shoulf send {item.reCalls}')
                     self.sendArpPktRequest(ArpOperation.Request,item.tarIP,item.portName)
                     item.reCalls+=1
                     item.time=time.time()
-            i+=1
-            log_info(f'i={i,len(self.queue)}')
+            # i+=1
+            # log_info(f'i={i,len(self.queue)}')
 
             
 
