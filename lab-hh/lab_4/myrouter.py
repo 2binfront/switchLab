@@ -45,8 +45,8 @@ class UnfinishedPacket:
             self.tarIP=tableRow.nextHop
         self.portName=tableRow.portName
         self.reCalls=0
-        # self.time=time.time()
-        self.time=0
+        self.time=time.time()
+        # self.time=0
         
 
 class Router(object):
@@ -199,12 +199,12 @@ class Router(object):
 
     def handle_queue(self):
         i=0
-        # while i< len(self.queue): 
         
+        while i< len(self.queue): 
         # single thread
-        if len(self.queue):
+        # if len(self.queue):
             item=self.queue[i]
-            log_info(f'cur item={item.tarIP}')
+            log_info(f'cur item={item.tarIP,item.time,time.time()}')
             if item.tarIP in self.arpTable.keys():
                 for port in self.portsList:
                     log_info(f'{len(port.name),len(item.portName)}')
@@ -214,11 +214,13 @@ class Router(object):
                 item.pkt[Ethernet].src=curport.ethaddr
                 item.pkt[Ethernet].dst=self.arpTable[item.tarIP]
                 self.net.send_packet(curport.name,item.pkt)
-                del(self.queue[i])
+                self.queue.pop(i)
+                # return
+                continue
                 # i+=1
-                # continue
             if item.reCalls>=5:
-                del(self.queue[i])
+                self.queue.pop(i)
+                # continue
             else:
                 curTime=time.time()
                 if curTime - item.time>1 or item.reCalls==0:
@@ -226,7 +228,7 @@ class Router(object):
                     self.sendArpPktRequest(ArpOperation.Request,item.tarIP,item.portName)
                     item.reCalls+=1
                     item.time=time.time()
-            # i+=1
+                    i+=1
             # log_info(f'i={i,len(self.queue)}')
 
             
@@ -241,17 +243,13 @@ class Router(object):
         while True:
             try:
                 recv = self.net.recv_packet(timeout=1.0)
+                self.handle_packet(recv)
+                self.handle_queue()
             except NoPackets:
+                self.handle_queue()
                 continue
             except Shutdown:
                 break
-
-            # self.handle_queue()
-            self.handle_packet(recv)
-            self.handle_queue()
-
-            #todo handle the queue
-
         self.stop()
 
     def stop(self):
