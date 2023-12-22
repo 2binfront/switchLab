@@ -109,6 +109,9 @@ class Router(object):
             line = fd.readline()
             while line:
                 rowList=line.split(' ')
+                if not rowList[0]:
+                    line = fd.readline()
+                    continue
                 table.append(TableRow(rowList[0],rowList[1],rowList[2],rowList[3]))
                 line = fd.readline()
 
