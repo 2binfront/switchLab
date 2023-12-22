@@ -115,6 +115,7 @@ class Router(object):
                 table.append(TableRow(rowList[0],rowList[1],rowList[2],rowList[3]))
                 line = fd.readline()
 
+
         for port in self.portsList:
             table.append(TableRow(port.ipaddr,port.netmask,None,port.name))
         self.table=table
