@@ -60,6 +60,36 @@ class Router(object):
             self.macList.append(port.ethaddr)
         self.queue=[]
 
+    def generateTable(self):
+        table=[]
+        with open('forwarding_table.txt', 'r') as fd:
+            line = fd.readline()
+            while line:
+                rowList=line.split(' ')
+                if not rowList[0]:
+                    line = fd.readline()
+                    continue
+                table.append(TableRow(rowList[0],rowList[1],rowList[2],rowList[3]))
+                line = fd.readline()
+        for port in self.portsList:
+            table.append(TableRow(port.ipaddr,port.netmask,None,port.name))
+        self.table=table
+        arpTable={}
+        for port in self.portsList:
+            arpTable[port.ipaddr]=port.ethaddr
+        self.arpTable=arpTable
+
+    def lookup_foward_table(self,IPv4Header):
+        tarIndex=-1
+        maxMask=0
+        for index,row in enumerate(self.table):
+            # log_info(f'finding {index} and {row.subnet}')
+            if IPv4Address(IPv4Header.dst) in row.subnet and row.subnet.prefixlen>maxMask:
+                maxMask=row.subnet.prefixlen 
+                tarIndex=index
+                log_info(f'found target {IPv4Header.src} and {row.subnet}')
+        return tarIndex
+
     def sendArpPktRequest(self,operation,tarIP,ifname):
         log_info(f'port={ifname,len(ifname.rstrip())}\n')
         for port in self.portsList:
@@ -104,25 +134,44 @@ class Router(object):
             targetprotoaddr= tarIP)
         self.net.send_packet(ifname.rstrip(),rePacket)
 
-    def generateTable(self):
-        table=[]
-        with open('forwarding_table.txt', 'r') as fd:
-            line = fd.readline()
-            while line:
-                rowList=line.split(' ')
-                if not rowList[0]:
-                    line = fd.readline()
-                    continue
-                table.append(TableRow(rowList[0],rowList[1],rowList[2],rowList[3]))
-                line = fd.readline()
-        for port in self.portsList:
-            table.append(TableRow(port.ipaddr,port.netmask,None,port.name))
-        self.table=table
-        arpTable={}
-        for port in self.portsList:
-            arpTable[port.ipaddr]=port.ethaddr
-        self.arpTable=arpTable
+    def generateICMPReply(self,packet):
+        i = ICMP()
+        i.icmptype=ICMPType.EchoReply
+        i.icmpdata.data=packet[ICMP].icmpdata.data
+        i.icmpdata.identifier=packet[ICMP].icmpdata.identifier
+        i.icmpdata.sequence=packet[ICMP].icmpdata.sequence
+        i.icmpcode=ICMPTypeCodeMap[ICMPType.EchoRequest]
+        #default upper protocol: ICMP
+        ipHeader=IPv4()
+        ipHeader.dst=packet[IPv4].src
+        ipHeader.src=packet[IPv4].dst
+        ipHeader.ttl=64
+        etHeader=Ethernet()
+        etHeader.src=self.macList[self.ipList.index(packet[IPv4].dst)]
+        etHeader.dst=packet[Ethernet].src
+        return i+ipHeader+etHeader
+    
+    def generateICMPError(self,packet,errorType,errorCode):
+        ipHeader=IPv4()
+        ipHeader.protocol = IPProtocol.ICMP
+        ipHeader.dst=packet[IPv4].src
+        ipHeader.src=packet[IPv4].dst
+        ipHeader.ttl=64
 
+        etHeader=Ethernet()
+        etHeader.src=self.macList[self.ipList.index(packet[IPv4].dst)]
+        etHeader.dst=packet[Ethernet].src
+
+        i = ICMP()
+        i.icmptype=errorType
+        i.icmpdata.data=packet.to_bytes()[:28]
+        i.icmpcode=errorCode
+        #default upper protocol: ICMP
+
+        del packet[Ethernet]
+        return i+ipHeader+etHeader        
+
+    
     def handle_packet(self, recv: switchyard.llnetbase.ReceivedPacket):        
         timestamp, ifName, packet = recv
         log_info(f'got newpkt {packet} from {ifName}\n')
@@ -148,38 +197,14 @@ class Router(object):
         elif packet.has_header(IPv4):
             if packet.has_header(ICMP) and packet[ICMP].icmptype==ICMPType.EchoRequest and packet[IPv4].dst in self.ipList:
                 log_info(f'got ICMP echo reply pkt {packet[ICMP]}\n')
-                i = ICMP()
-                i.icmptype=ICMPType.EchoReply
-                i.icmpdata.data=packet[ICMP].icmpdata.data
-                i.icmpdata.identifier=packet[ICMP].icmpdata.identifier
-                i.icmpdata.sequence=packet[ICMP].icmpdata.sequence
-                i.icmpcode=ICMPTypeCodeMap[ICMPType.EchoRequest]
-                #default upper protocol ICMP
-                ipHeader=IPv4()
-                ipHeader.dst=packet[IPv4].src
-                ipHeader.src=packet[IPv4].dst
-                ipHeader.ttl=64
-                etHeader=Ethernet()
-                etHeader.src=self.macList[self.ipList.index(packet[IPv4].dst)]
-                etHeader.dst=packet[Ethernet].src
-                packet=i+ipHeader+etHeader
+                packet=self.generateICMPReply(packet)
             IPv4Header=packet.get_header(IPv4)
-
-
             # log_info(f'got ip pkt {IPv4Header}\n')
-            tarIndex=-1
-            maxMask=0
-            for index,row in enumerate(self.table):
-                # log_info(f'finding {index} and {row.subnet}')
-                if IPv4Address(IPv4Header.dst) in row.subnet and row.subnet.prefixlen>maxMask:
-                    maxMask=row.subnet.prefixlen 
-                    tarIndex=index
-                    log_info(f'found target {IPv4Header.src} and {row.subnet}')
+            tarIndex=self.lookup_foward_table(IPv4Header)
             log_info(f'targetIndex {tarIndex}')
+            # match item
             if tarIndex!=-1:
-                # log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
                 log_info(f'IPv4Header={str(IPv4Header)}')
-                # log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
 
                 if not self.table[tarIndex].nextHop:
                     log_info(f'rcsv detail:{ifName}\n')
@@ -203,6 +228,18 @@ class Router(object):
                     log_info(f'rcsv port:{ifName}\n')
                     log_info(f'finding port:{self.table[tarIndex].portName}\n')
                     self.queue.append(UnfinishedPacket(packet,self.table[tarIndex],nextIP))
+            # no match items        
+            else:
+                packet=self.generateICMPError(packet,ICMPType.DestinationUnreachable,ICMPTypeCodeMap[ICMPType.DestinationUnreachable].NetworkUnreachable)
+                tarIndex=self.lookup_foward_table(packet[IPv4])
+                if not self.table[tarIndex].nextHop:
+                    log_info(f'rcsv detail:{ifName}\n')
+                    nextIP=packet[IPv4].dst
+                else:
+                    nextIP=self.table[tarIndex].nextHop
+                self.queue.append(UnfinishedPacket(packet,self.table[tarIndex],nextIP))
+
+
         else:
             log_failure('no valid header found')
         log_info('arptable as follows')
