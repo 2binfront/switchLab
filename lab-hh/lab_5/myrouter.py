@@ -46,7 +46,6 @@ class UnfinishedPacket:
         self.portName=tableRow.portName
         self.reCalls=0
         self.time=time.time()
-        # self.time=0
         
 
 class Router(object):
@@ -54,6 +53,11 @@ class Router(object):
         self.net = net
         # other initialization stuff here
         self.portsList=net.interfaces()
+        self.ipList=[]
+        self.macList=[]
+        for port in self.portsList:
+            self.ipList.append(port.ipaddr)
+            self.macList.append(port.ethaddr)
         self.queue=[]
 
     def sendArpPktRequest(self,operation,tarIP,ifname):
@@ -102,10 +106,7 @@ class Router(object):
 
     def generateTable(self):
         table=[]
-        # log_info(f'opening forwarding_table \n')
-
         with open('forwarding_table.txt', 'r') as fd:
-            # log_info(f'opening forwarding_table {fd}\n')
             line = fd.readline()
             while line:
                 rowList=line.split(' ')
@@ -114,8 +115,6 @@ class Router(object):
                     continue
                 table.append(TableRow(rowList[0],rowList[1],rowList[2],rowList[3]))
                 line = fd.readline()
-
-
         for port in self.portsList:
             table.append(TableRow(port.ipaddr,port.netmask,None,port.name))
         self.table=table
@@ -127,16 +126,18 @@ class Router(object):
     def handle_packet(self, recv: switchyard.llnetbase.ReceivedPacket):        
         timestamp, ifName, packet = recv
         log_info(f'got newpkt {packet} from {ifName}\n')
-        # TODO: your logic here
 
         # search arp table if is arp query packet
         if packet.has_header(Arp):
             arp = packet.get_header(Arp)
+            if packet[Ethernet].dst!='ff:ff:ff:ff:ff:ff' or packet[Ethernet].dst!=ifName.ethaddr:
+                log_info(f'got malicious arp pkt {packet}, dropping\n')
+                return
+
             # log_info(f'got arp pkt {arp.operation}\n')
             self.arpTable[arp.senderprotoaddr]=arp.senderhwaddr
             # for key,val in self.arpTable.items():
             #     print(key,' arp pair ',val)
-
             if arp.operation==ArpOperation.Request:
                 if arp.targetprotoaddr in self.arpTable.keys():
                     self.sendArpPktReply(ArpOperation.Reply,arp.targetprotoaddr,self.arpTable[arp.targetprotoaddr],arp.senderprotoaddr,arp.senderhwaddr,ifName)
@@ -145,7 +146,26 @@ class Router(object):
 
         # search forwarding table if not arp query
         elif packet.has_header(IPv4):
+            if packet.has_header(ICMP) and packet[ICMP].icmptype==ICMPType.EchoRequest and packet[IPv4].dst in self.ipList:
+                log_info(f'got ICMP echo reply pkt {packet[ICMP]}\n')
+                i = ICMP()
+                i.icmptype=ICMPType.EchoReply
+                i.icmpdata.data=packet[ICMP].icmpdata.data
+                i.icmpdata.identifier=packet[ICMP].icmpdata.identifier
+                i.icmpdata.sequence=packet[ICMP].icmpdata.sequence
+                i.icmpcode=ICMPTypeCodeMap[ICMPType.EchoRequest]
+                #default upper protocol ICMP
+                ipHeader=IPv4()
+                ipHeader.dst=packet[IPv4].src
+                ipHeader.src=packet[IPv4].dst
+                ipHeader.ttl=64
+                etHeader=Ethernet()
+                etHeader.src=self.macList[self.ipList.index(packet[IPv4].dst)]
+                etHeader.dst=packet[Ethernet].src
+                packet=i+ipHeader+etHeader
             IPv4Header=packet.get_header(IPv4)
+
+
             # log_info(f'got ip pkt {IPv4Header}\n')
             tarIndex=-1
             maxMask=0
@@ -159,7 +179,6 @@ class Router(object):
             if tarIndex!=-1:
                 # log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
                 log_info(f'IPv4Header={str(IPv4Header)}')
-                packet[IPv4].ttl-=1
                 # log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
 
                 if not self.table[tarIndex].nextHop:
@@ -168,18 +187,14 @@ class Router(object):
                 else:
                     nextIP=self.table[tarIndex].nextHop
 
-
                 #if arp cache hit
                 if nextIP in self.arpTable.keys():
                     for port in self.portsList:
                         if port.name==self.table[tarIndex].portName:
                             curport=port
-
-                    if not curport:
-                        log_failure(f'curport not exist')
-
                     packet[Ethernet].src=curport.ethaddr
                     packet[Ethernet].dst=self.arpTable[nextIP]
+                    packet[IPv4].ttl-=1
 
                     log_info(f'sending packet={str(packet)}')
                     self.net.send_packet(self.table[tarIndex].portName,packet)
@@ -199,7 +214,6 @@ class Router(object):
 
     def handle_queue(self):
         i=0
-        
         while i< len(self.queue): 
         # single thread
         # if len(self.queue):
@@ -213,14 +227,14 @@ class Router(object):
 
                 item.pkt[Ethernet].src=curport.ethaddr
                 item.pkt[Ethernet].dst=self.arpTable[item.tarIP]
+                item.pkt[IPv4].ttl-=1
                 self.net.send_packet(curport.name,item.pkt)
                 self.queue.pop(i)
                 # return
                 continue
-                # i+=1
+
             if item.reCalls>=5:
                 self.queue.pop(i)
-                # continue
             else:
                 curTime=time.time()
                 if curTime - item.time>1 or item.reCalls==0:

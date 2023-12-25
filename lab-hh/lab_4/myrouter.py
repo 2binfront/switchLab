@@ -102,8 +102,6 @@ class Router(object):
 
     def generateTable(self):
         table=[]
-        # log_info(f'opening forwarding_table \n')
-
         with open('forwarding_table.txt', 'r') as fd:
             # log_info(f'opening forwarding_table {fd}\n')
             line = fd.readline()
@@ -114,11 +112,10 @@ class Router(object):
                     continue
                 table.append(TableRow(rowList[0],rowList[1],rowList[2],rowList[3]))
                 line = fd.readline()
-
-
         for port in self.portsList:
             table.append(TableRow(port.ipaddr,port.netmask,None,port.name))
         self.table=table
+
         arpTable={}
         for port in self.portsList:
             arpTable[port.ipaddr]=port.ethaddr
@@ -127,13 +124,12 @@ class Router(object):
     def handle_packet(self, recv: switchyard.llnetbase.ReceivedPacket):        
         timestamp, ifName, packet = recv
         log_info(f'got newpkt {packet} from {ifName}\n')
-        # TODO: your logic here
         arp = packet.get_header(Arp)
         IPv4Header=packet.get_header(IPv4)
 
         # search arp table if is arp query packet
         if packet.has_header(Arp):
-            # log_info(f'got arp pkt {arp.operation}\n')
+            log_info(f'got arp pkt {arp.operation}\n')
             self.arpTable[arp.senderprotoaddr]=arp.senderhwaddr
             # for key,val in self.arpTable.items():
             #     print(key,' arp pair ',val)
@@ -146,7 +142,7 @@ class Router(object):
 
         # search forwarding table if not arp query
         elif packet.has_header(IPv4):
-            # log_info(f'got ip pkt {IPv4Header}\n')
+            log_info(f'got ip pkt {IPv4Header}\n')
             tarIndex=-1
             maxMask=0
             for index,row in enumerate(self.table):
@@ -155,7 +151,7 @@ class Router(object):
                     maxMask=row.subnet.prefixlen 
                     tarIndex=index
                     log_info(f'found target {IPv4Header.src} and {row.subnet}')
-            log_info(f'targetIndex {tarIndex}')
+            log_info(f'targetIndex: {tarIndex}')
             if tarIndex!=-1:
                 # log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
                 log_info(f'IPv4Header={str(IPv4Header)}')
@@ -194,6 +190,7 @@ class Router(object):
                     self.queue.append(UnfinishedPacket(packet,self.table[tarIndex],nextIP))
         else:
             log_failure('no valid header found')
+            
         log_info('arptable as follows')
         for (k,v) in self.arpTable.items(): 
             print (f'{ k,v}') 
