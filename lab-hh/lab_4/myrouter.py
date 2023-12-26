@@ -209,7 +209,7 @@ class Router(object):
             if item.tarIP in self.arpTable.keys():
                 for port in self.portsList:
                     log_info(f'{len(port.name),len(item.portName)}')
-                    if port.name==item.portName or port.name==item.portName.rstrip():
+                    if port.name==item.portName.rstrip():
                         curport=port
 
                 item.pkt[Ethernet].src=curport.ethaddr
