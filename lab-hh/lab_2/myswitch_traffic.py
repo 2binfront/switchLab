@@ -25,39 +25,34 @@ def main(net: switchyard.llnetbase.LLNetBase):
         except Shutdown:
             break
         else:
-            log_info(f"incomePort:{fromIface} incomeMac:{packet.get_header(Ethernet).src}")
-            if switchTable.get(packet.get_header(Ethernet).src):
-                switchTable[packet.get_header(Ethernet).src][0]=fromIface
+            log_info(f"incomePort:{fromIface} incomeMac:{packet[Ethernet].src}")
+            if switchTable.get(packet[Ethernet].src):
+                switchTable[packet[Ethernet].src][0]=fromIface
             else:
                 if len(switchTable)==size:
                     tmp=sorted(switchTable.items(),key=(lambda x:x[1][1]))
                     del switchTable[tmp[0][0]]
-                switchTable[packet.get_header(Ethernet).src]=[fromIface,0]
-            # for key in switchTable.keys():
-            #     if key!=packet.get_header(Ethernet).src:
-            #         switchTable[key][1]+=1
+                switchTable[packet[Ethernet].src]=[fromIface,0]
 
-
-
-        log_debug (f"In {net.name} received packet {packet} on {fromIface}")
-        eth = packet.get_header(Ethernet)
-        if eth is None:
-            log_info("Received a non-Ethernet packet?!")
-            return
-        if eth.dst in mymacs:
-            log_info("Received a packet intended for me")
-        else:
-            #find the intf in switchTable
-            if switchTable.get(eth.dst,False):
-                log_info(f"getResult:{switchTable.get(eth.dst,False)} sending packet {packet} to {switchTable[eth.dst]}")
-                switchTable[eth.dst][1]+=1
-                net.send_packet(switchTable[eth.dst][0], packet)
+            # log_info(f"In {net.name} received packet {packet} on {fromIface}")
+            eth = packet[Ethernet]
+            if eth is None:
+                log_info("Received a non-Ethernet packet?!")
+                return
+            if eth.dst in mymacs:
+                log_info("Received a packet intended for me")
             else:
-                for intf in my_interfaces:
-                    if fromIface!= intf.name:
-                        log_info (f"Flooding packet {packet} to {intf.name}")
-                        net.send_packet(intf.name, packet)
-            print(switchTable)
+                #find the intf in switchTable
+                if switchTable.get(eth.dst,False):
+                    log_info(f"getResult:{switchTable.get(eth.dst,False)} sending packet {packet} to {switchTable[eth.dst]}")
+                    switchTable[eth.dst][1]+=1
+                    net.send_packet(switchTable[eth.dst][0], packet)
+                else:
+                    for intf in my_interfaces:
+                        if fromIface!= intf.name:
+                            log_info (f"Flooding packet {packet} to {intf.name}")
+                            net.send_packet(intf.name, packet)
+                print(switchTable)
             
 
     net.shutdown()

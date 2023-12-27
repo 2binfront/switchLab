@@ -221,8 +221,6 @@ class Router(object):
                 else:
                     self.queue.append(UnfinishedPacket(packet,curPort,nextIP,icmpFlag))
 
-
-    
     def handle_packet(self, recv: switchyard.llnetbase.ReceivedPacket):        
         timestamp, ifName, packet = recv
         log_info(f'got newpkt {packet} from {ifName}\n')

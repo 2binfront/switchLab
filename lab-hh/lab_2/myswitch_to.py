@@ -34,26 +34,26 @@ def main(net: switchyard.llnetbase.LLNetBase):
             break
         else:
             t = time.time()
-            switchTable[packet.get_header(Ethernet).src]=(fromIface,t)
+            switchTable[packet[Ethernet].src]=(fromIface,t)
             for mac in list(switchTable.keys()):
                 if t-switchTable[mac][1]>=5:
                     del switchTable[mac]
-        log_debug (f"In {net.name} received packet {packet} on {fromIface}")
-        eth = packet.get_header(Ethernet)
-        if eth is None:
-            log_info("Received a non-Ethernet packet?!")
-            return
-        if eth.dst in mymacs:
-            log_info("Received a packet intended for me")
-        else:
-            #find the intf in switchTable
-            if switchTable.get(eth.dst,False):
-                log_info(f"getResult:{switchTable.get(eth.dst,False)} sending packet {packet} to {switchTable[eth.dst]}")
-                net.send_packet(switchTable[eth.dst][0], packet)
+            log_info(f"In {net.name} received packet {packet} on {fromIface}")
+            eth = packet[Ethernet]
+            if eth is None:
+                log_info("Received a non-Ethernet packet?!")
+                return
+            if eth.dst in mymacs:
+                log_info("Received a packet intended for me")
             else:
-                for intf in my_interfaces:
-                    if fromIface!= intf.name:
-                        log_info (f"Flooding packet {packet} to {intf.name}")
-                        net.send_packet(intf.name, packet)
+                #find the intf in switchTable
+                if switchTable.get(eth.dst,False):
+                    log_info(f"getResult:{switchTable.get(eth.dst,False)} sending packet {packet} to {switchTable[eth.dst]}")
+                    net.send_packet(switchTable[eth.dst][0], packet)
+                else:
+                    for intf in my_interfaces:
+                        if fromIface!= intf.name:
+                            log_info (f"Flooding packet {packet} to {intf.name}")
+                            net.send_packet(intf.name, packet)
 
     net.shutdown()
