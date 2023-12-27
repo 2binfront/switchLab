@@ -56,7 +56,6 @@ class UnfinishedPacket:
         self.time=time.time()
         self.arpSent=0
         
-
 class Router(object):
     def __init__(self, net: switchyard.llnetbase.LLNetBase):
         self.net = net

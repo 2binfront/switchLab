@@ -8,7 +8,6 @@ import time
 import switchyard
 from switchyard.lib.userlib import *
 
-
 # 核心是想明白如何把来数据包的ip与表项逐项比对寻找出最长前缀匹配，
 # python内置有 IPv4Network IPv4Address对象
 # 前者用于整合ip地址和mask，快速得出mask位数；后者用于与int()结合快速掩码ip，并进行ip比对
@@ -17,11 +16,9 @@ from switchyard.lib.userlib import *
 # 循环每个 TableRow,逐个寻找符合最长前缀匹配的表项，若符合再比较掩码位数，
 # 记住并更新最长前缀匹配表项index。不存在则为初始值-1
         
-
 # 匹配到对应项后，IP header中TTL值-1，暂时不管过期
 # 生成一个新的ethernet header，要根据next hop值来设置目标mac值。
 # next hop的值不存在时需要生成arp query向其他人询问
-
 
 class TableRow:
     def __init__(self,prefix,mask,nextHop,portName):
@@ -47,7 +44,6 @@ class UnfinishedPacket:
         self.reCalls=0
         self.time=time.time()
         # self.time=0
-        
 
 class Router(object):
     def __init__(self, net: switchyard.llnetbase.LLNetBase):
@@ -56,20 +52,19 @@ class Router(object):
         self.portsList=net.interfaces()
         self.queue=[]
 
-    def sendArpPktRequest(self,operation,tarIP,ifname):
+    def sendArpPktRequest(self,tarIP,ifname):
         log_info(f'port={ifname,len(ifname.rstrip())}\n')
         for port in self.portsList:
             if port.name==ifname.rstrip() or port.name==ifname:
                 curport=port
                 log_info(f'curport exist:{curport}')
-
         rePacket = Ethernet()
         rePacket.src =curport.ethaddr
         rePacket.dst = 'ff:ff:ff:ff:ff:ff'
         rePacket.ethertype = EtherType.ARP
         rePacket+=Arp(
             #reply type
-            operation=operation,
+            operation=ArpOperation.Request,
             #router port ethaddr
             senderhwaddr=curport.ethaddr,
             #router port ip
@@ -79,17 +74,16 @@ class Router(object):
             #original arp request ipaddr
             targetprotoaddr= tarIP)
         log_info(f'curport exist again:{curport.name,rePacket}')
-
         self.net.send_packet(curport.name,rePacket)
 
-    def sendArpPktReply(self,operation,senderIP,senderhwaddr,tarIP,tarhwaddr,ifname):
+    def sendArpPktReply(self,senderIP,senderhwaddr,tarIP,tarhwaddr,ifname):
         rePacket = Ethernet()
         rePacket.src =senderhwaddr
         rePacket.dst = tarhwaddr
         rePacket.ethertype = EtherType.ARP
         rePacket+=Arp(
             #reply type
-            operation=operation,
+            operation=ArpOperation.Reply,
             #router port ethaddr
             senderhwaddr=senderhwaddr,
             #router port ip
@@ -103,7 +97,6 @@ class Router(object):
     def generateTable(self):
         table=[]
         with open('forwarding_table.txt', 'r') as fd:
-            # log_info(f'opening forwarding_table {fd}\n')
             line = fd.readline()
             while line:
                 rowList=line.split(' ')
@@ -115,7 +108,6 @@ class Router(object):
         for port in self.portsList:
             table.append(TableRow(port.ipaddr,port.netmask,None,port.name))
         self.table=table
-
         arpTable={}
         for port in self.portsList:
             arpTable[port.ipaddr]=port.ethaddr
@@ -126,17 +118,15 @@ class Router(object):
         log_info(f'got newpkt {packet} from {ifName}\n')
         arp = packet.get_header(Arp)
         IPv4Header=packet.get_header(IPv4)
-
         # search arp table if is arp query packet
         if packet.has_header(Arp):
             log_info(f'got arp pkt {arp.operation}\n')
             self.arpTable[arp.senderprotoaddr]=arp.senderhwaddr
             # for key,val in self.arpTable.items():
             #     print(key,' arp pair ',val)
-
             if arp.operation==ArpOperation.Request:
                 if arp.targetprotoaddr in self.arpTable.keys():
-                    self.sendArpPktReply(ArpOperation.Reply,arp.targetprotoaddr,self.arpTable[arp.targetprotoaddr],arp.senderprotoaddr,arp.senderhwaddr,ifName)
+                    self.sendArpPktReply(arp.targetprotoaddr,self.arpTable[arp.targetprotoaddr],arp.senderprotoaddr,arp.senderhwaddr,ifName)
             elif arp.operation==ArpOperation.Reply:
                 self.arpTable[arp.targetprotoaddr]=arp.targethwaddr
 
@@ -146,51 +136,38 @@ class Router(object):
             tarIndex=-1
             maxMask=0
             for index,row in enumerate(self.table):
-                # log_info(f'finding {index} and {row.subnet}')
                 if IPv4Address(IPv4Header.dst) in row.subnet and row.subnet.prefixlen>maxMask:
                     maxMask=row.subnet.prefixlen 
                     tarIndex=index
                     log_info(f'found target {IPv4Header.src} and {row.subnet}')
             log_info(f'targetIndex: {tarIndex}')
             if tarIndex!=-1:
-                # log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
                 log_info(f'IPv4Header={str(IPv4Header)}')
                 packet[IPv4].ttl-=1
-                # log_info(f'packet[IPv4].ttl={packet[IPv4].ttl}')
-
                 if not self.table[tarIndex].nextHop:
                     log_info(f'rcsv detail:{ifName}\n')
                     nextIP=IPv4Header.dst
                 else:
                     nextIP=self.table[tarIndex].nextHop
 
-                    # self.sendArpPktRequest(ArpOperation.Request,IPv4Header.dst,self.table[tarIndex].portName)
-                    # self.queue.append(UnfinishedPacket(packet,self.table[tarIndex],IPv4Header.dst))
-
                 #if arp cache hit
                 if nextIP in self.arpTable.keys():
                     for port in self.portsList:
                         if port.name==self.table[tarIndex].portName:
                             curport=port
-
                     if not curport:
                         log_failure(f'curport not exist')
-
                     packet[Ethernet].src=curport.ethaddr
                     packet[Ethernet].dst=self.arpTable[nextIP]
                     log_info(f'sending packet={str(packet)}')
-
                     self.net.send_packet(self.table[tarIndex].portName,packet)
                 #if not hit
                 else:
-                    #TODO generate arp query and put unfinished packet into queue
                     log_info(f'rcsv port:{ifName}\n')
                     log_info(f'finding port:{self.table[tarIndex].portName}\n')
-                    # self.sendArpPktRequest(ArpOperation.Request,nextIP,self.table[tarIndex].portName)
                     self.queue.append(UnfinishedPacket(packet,self.table[tarIndex],nextIP))
         else:
             log_failure('no valid header found')
-            
         log_info('arptable as follows')
         for (k,v) in self.arpTable.items(): 
             print (f'{ k,v}') 
@@ -200,7 +177,6 @@ class Router(object):
 
     def handle_queue(self):
         i=0
-        
         while i< len(self.queue): 
         # single thread
         # if len(self.queue):
@@ -211,7 +187,6 @@ class Router(object):
                     log_info(f'{len(port.name),len(item.portName)}')
                     if port.name==item.portName.rstrip():
                         curport=port
-
                 item.pkt[Ethernet].src=curport.ethaddr
                 item.pkt[Ethernet].dst=self.arpTable[item.tarIP]
                 self.net.send_packet(curport.name,item.pkt)
@@ -226,21 +201,16 @@ class Router(object):
                 curTime=time.time()
                 if curTime - item.time>1 or item.reCalls==0:
                     log_info(f'shoulf send {item.reCalls}')
-                    self.sendArpPktRequest(ArpOperation.Request,item.tarIP,item.portName)
+                    self.sendArpPktRequest(item.tarIP,item.portName)
                     item.reCalls+=1
                     item.time=time.time()
                     i+=1
-            # log_info(f'i={i,len(self.queue)}')
-
-            
-
 
     def start(self):
         '''A running daemon of the router.
         Receive packets until the end of time.
         '''
         self.generateTable()
-    
         while True:
             try:
                 recv = self.net.recv_packet(timeout=1.0)
@@ -255,7 +225,6 @@ class Router(object):
 
     def stop(self):
         self.net.shutdown()
-
 
 def main(net):
     '''
