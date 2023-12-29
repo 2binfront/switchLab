@@ -322,7 +322,7 @@ class Router(object):
                 self.handle_packet(recv)
                 self.handle_queue()
             except NoPackets:
-                # self.handle_queue()
+                self.handle_queue()
                 continue
             except Shutdown:
                 break
