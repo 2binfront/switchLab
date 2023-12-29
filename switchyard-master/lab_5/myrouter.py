@@ -80,27 +80,29 @@ class Router(object):
         self.arp_table={}
         self.forward_table=[]
         for i in self.interfaces:      
-            #print(i.name)
-            #print(i.netmask)
-            #print(i.ipaddr)
-            #print("a:")
+            # print(i.name)
+            # print(i.netmask)
+            # print(i.ipaddr)
+            # #print("a:")
             
-            #prefix=ipaddress.IPv4Address(str(i.ipaddr)+"/"+str(i.netmask))
+            # #prefix=ipaddress.IPv4Address(str(i.ipaddr)+"/"+str(i.netmask))
 
-            prefix=ipaddress.ip_network(str(i.ipaddr)+"/"+str(i.netmask), strict=False)
-            prefix=str(prefix)
-            if '/' in  prefix:
-                prefix=prefix.split("/")
-                prefix=prefix[0]
-            #print(prefix)
-            prefix=IPv4Address(prefix)
+            # prefix=ipaddress.ip_network(str(i.ipaddr)+"/"+str(i.netmask), strict=False)
+            # prefix=str(prefix)
+            # if '/' in  prefix:
+            #     prefix=prefix.split("/")
+            #     prefix=prefix[0]
+            # #print(prefix)
+            # if not prefix:
+            #     continue
+            prefix=IPv4Address(int(i.ipaddr)&int(i.netmask))
             #print(i.ipaddr)
             #print("end")
             #print(type(prefix))
             #print(type(i.netmask))
             a=Node(prefix,i.netmask,None,i.name)     
             self.forward_table.append(a)
-        
+        print('111111,openning txt file\n')
         file = open("forwarding_table.txt")
         while 1:
             line = file.readline()
@@ -109,8 +111,11 @@ class Router(object):
             else:
                 line=line.strip('\n')
                 d=line.split(" ")
+                if not d[0]:
+                    continue
                 a=Node(IPv4Address(d[0]),IPv4Address(d[1]),IPv4Address(d[2]),d[3])
                 self.forward_table.append(a)
+        print('111111, txt file done\n')
         for a in self.forward_table:
             print(a.prefix," ",a.mask," ",a.nexthop," ",a.name)
 

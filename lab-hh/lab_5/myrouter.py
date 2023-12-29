@@ -202,13 +202,13 @@ class Router(object):
             packet=self.generateICMPError(packet,ICMPType.DestinationUnreachable,ICMPTypeCodeMap[ICMPType.DestinationUnreachable].NetworkUnreachable)
             self.forward_packet(packet,1)
         else:
-            if packet[IPv4].ttl<=1:
+            packet[IPv4].ttl-=1
+            if packet[IPv4].ttl<=0:
                 log_info(f'in forward_packet ttl expired')
                 packet=self.generateICMPError(packet,ICMPType.TimeExceeded,None)
                 self.forward_packet(packet,1)
             else:
-                log_info(f'in forward_packet ttl={packet[IPv4].ttl-1}')
-                packet[IPv4].ttl-=1
+                log_info(f'in forward_packet ttl={packet[IPv4].ttl}')
                 nextIP=self.get_target_ip(packet[IPv4],tarIndex)
                 for port in self.portsList:
                     if port.name==self.table[tarIndex].portName:
@@ -274,9 +274,9 @@ class Router(object):
         i=0
         # for _item in self.queue:
         #     _item.arpSent=0
-        while i< len(self.queue): 
+        # while i< len(self.queue): 
         # single thread
-        # if len(self.queue):
+        if len(self.queue):
             item=self.queue[i]
             # log_info(f'cur item={item.tarIP,str(item.pkt),item.time,time.time()}')
             if item.tarIP in self.arpTable.keys():
@@ -286,7 +286,8 @@ class Router(object):
                 item.pkt[Ethernet].dst=self.arpTable[item.tarIP]
                 self.net.send_packet(item.port.name,item.pkt)
                 self.queue.pop(i)
-                continue
+                # continue
+                return
             if item.reCalls>=5:
                 packet=self.generateICMPError(item.pkt,ICMPType.DestinationUnreachable,ICMPTypeCodeMap[ICMPType.DestinationUnreachable].HostUnreachable)
                 self.forward_packet(packet,1)
@@ -300,10 +301,6 @@ class Router(object):
                     item.reCalls+=1
                     item.time=curTime
                     i+=1
-                    if(i<len(self.queue)):
-                        print(f'22222,{self.queue[i-1].tarIP,self.queue[i].tarIP,self.queue[i].arpSent}')
-                    else:
-                        print('22222')
                     for j in range(i,len(self.queue)):
                         # print(f'11111111111111111,{item.tarIP,self.queue[j].tarIP,self.queue[j].arpSent,}')
                         if self.queue[j].tarIP==item.tarIP and self.queue[j].arpSent==0:
