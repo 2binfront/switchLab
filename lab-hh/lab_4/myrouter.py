@@ -53,9 +53,9 @@ class Router(object):
         self.queue=[]
 
     def sendArpPktRequest(self,tarIP,ifname):
-        log_info(f'port={ifname,len(ifname.rstrip())}\n')
+        log_info(f'port={ifname,len(ifname)}\n')
         for port in self.portsList:
-            if port.name==ifname.rstrip() or port.name==ifname:
+            if port.name==ifname or port.name==ifname:
                 curport=port
                 log_info(f'curport exist:{curport}')
         rePacket = Ethernet()
@@ -92,13 +92,14 @@ class Router(object):
             targethwaddr=tarhwaddr,
             #original arp request ipaddr
             targetprotoaddr= tarIP)
-        self.net.send_packet(ifname.rstrip(),rePacket)
+        self.net.send_packet(ifname,rePacket)
 
     def generateTable(self):
         table=[]
         with open('forwarding_table.txt', 'r') as fd:
             line = fd.readline()
             while line:
+                line=line.strip('\n')
                 rowList=line.split(' ')
                 if not rowList[0]:
                     line = fd.readline()
@@ -185,7 +186,7 @@ class Router(object):
             if item.tarIP in self.arpTable.keys():
                 for port in self.portsList:
                     log_info(f'{len(port.name),len(item.portName)}')
-                    if port.name==item.portName.rstrip():
+                    if port.name==item.portName:
                         curport=port
                 item.pkt[Ethernet].src=curport.ethaddr
                 item.pkt[Ethernet].dst=self.arpTable[item.tarIP]

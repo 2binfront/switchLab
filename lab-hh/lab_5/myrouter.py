@@ -246,6 +246,7 @@ class Router(object):
                     self.sendArpPktReply(arp.targetprotoaddr,self.macList[self.ipList.index(arp.targetprotoaddr)],arp.senderprotoaddr,arp.senderhwaddr,ifName)
             elif arp.operation==ArpOperation.Reply:
                 self.arpTable[arp.targetprotoaddr]=arp.targethwaddr
+            self.handle_queue()
         # search forwarding table if not arp query
         elif packet.has_header(IPv4):
             if packet.has_header(ICMP) and packet[IPv4].dst in self.ipList and packet[ICMP].icmptype==ICMPType.EchoRequest:        
@@ -320,7 +321,7 @@ class Router(object):
             try:
                 recv = self.net.recv_packet(timeout=1.0)
                 self.handle_packet(recv)
-                self.handle_queue()
+                
             except NoPackets:
                 self.handle_queue()
                 continue
