@@ -6,10 +6,10 @@ from switchyard.lib.userlib import *
 from threading import *
 import time
 
-def switchy_main(net):
+def switchy_main(net,**kwargs):
     my_interfaces = net.interfaces()
     mymacs = [intf.ethaddr for intf in my_interfaces]
-
+    
     while True:
         gotpkt = True
         try:

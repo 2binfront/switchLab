@@ -6,13 +6,16 @@ from switchyard.lib.userlib import *
 from threading import *
 from random import randint
 import time
+import random
 
-def switchy_main(net):
+def switchy_main(net,**kwargs):
+
+    print('rcsv args:',kwargs)
 
     my_intf = net.interfaces()
     mymacs = [intf.ethaddr for intf in my_intf]
     myips = [intf.ipaddr for intf in my_intf]
-
+    print("comming kwargs=",kwargs)
     while True:
         gotpkt = True
         try:
@@ -27,7 +30,15 @@ def switchy_main(net):
 
         if gotpkt:
             log_debug("I got a packet {}".format(pkt))
-
+            if pkt[TCP] and pkt[TCP].ACK==1:
+                log_info("U are a lucky ACK basterd")
+            else:
+                luck=random.random()
+                if luck <= kwargs.dropRate:
+                    log_info(":( sorry to inform you that your packet was 'accidentlly' lost")
+                    continue
+                else:
+                    log_info("U are a lucky normal basterd")
         if dev == "middlebox-eth0":
             log_debug("Received from blaster")
             '''
@@ -35,6 +46,7 @@ def switchy_main(net):
             Should I drop it?
             If not, modify headers & send to blastee
             '''
+            pkt[Ethernet].src,pkt[Ethernet].dst=net.interface_by_name("middlebox-eth1").ethaddr,EthAddr("20:00:00:00:00:01")
             net.send_packet("middlebox-eth1", pkt)
         elif dev == "middlebox-eth1":
             log_debug("Received from blastee")
@@ -43,6 +55,8 @@ def switchy_main(net):
             Modify headers & send to blaster. Not dropping ACK packets!
             net.send_packet("middlebox-eth0", pkt)
             '''
+            pkt[Ethernet].src,pkt[Ethernet].dst=net.interface_by_name("middlebox-eth0").ethaddr,EthAddr("10:00:00:00:00:01")
+            net.send_packet("middlebox-eth0", pkt)
         else:
             log_debug("Oops :))")
 
