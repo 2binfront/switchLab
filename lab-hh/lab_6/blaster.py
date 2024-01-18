@@ -7,11 +7,16 @@ from random import randint
 import time
 
 
-def switchy_main(net):
+def switchy_main(net,**kwargs):
     my_intf = net.interfaces()
     mymacs = [intf.ethaddr for intf in my_intf]
     myips = [intf.ipaddr for intf in my_intf]
-
+    blasteeIP=IPv4Address(kwargs.blasteeIP)
+    num=kwargs.num
+    length=kwargs.length
+    senderWindow=kwargs.senderWindow
+    timeout=kwargs.timeout
+    recvTimeout=kwargs.recvTimeout
     while True:
         gotpkt = True
         try:

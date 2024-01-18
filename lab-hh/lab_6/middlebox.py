@@ -30,15 +30,7 @@ def switchy_main(net,**kwargs):
 
         if gotpkt:
             log_debug("I got a packet {}".format(pkt))
-            if pkt[TCP] and pkt[TCP].ACK==1:
-                log_info("U are a lucky ACK basterd")
-            else:
-                luck=random.random()
-                if luck <= kwargs.dropRate:
-                    log_info(":( sorry to inform you that your packet was 'accidentlly' lost")
-                    continue
-                else:
-                    log_info("U are a lucky normal basterd")
+
         if dev == "middlebox-eth0":
             log_debug("Received from blaster")
             '''
@@ -46,8 +38,15 @@ def switchy_main(net,**kwargs):
             Should I drop it?
             If not, modify headers & send to blastee
             '''
-            pkt[Ethernet].src,pkt[Ethernet].dst=net.interface_by_name("middlebox-eth1").ethaddr,EthAddr("20:00:00:00:00:01")
-            net.send_packet("middlebox-eth1", pkt)
+            luck=random.random()
+            if luck <= kwargs.dropRate:
+                log_info(":( sorry to inform you that your packet was 'accidentlly' lost")
+                continue
+            else:
+                log_info("U are a lucky basterd")
+                pkt[Ethernet].src,pkt[Ethernet].dst=net.interface_by_name("middlebox-eth1").ethaddr,EthAddr("20:00:00:00:00:01")
+                pkt[IPv4].ttl-=1
+                net.send_packet("middlebox-eth1", pkt)
         elif dev == "middlebox-eth1":
             log_debug("Received from blastee")
             '''
@@ -56,6 +55,7 @@ def switchy_main(net,**kwargs):
             net.send_packet("middlebox-eth0", pkt)
             '''
             pkt[Ethernet].src,pkt[Ethernet].dst=net.interface_by_name("middlebox-eth0").ethaddr,EthAddr("10:00:00:00:00:01")
+            pkt[IPv4].ttl-=1
             net.send_packet("middlebox-eth0", pkt)
         else:
             log_debug("Oops :))")
