@@ -9,8 +9,8 @@ import time
 def switchy_main(net,**kwargs):
     my_interfaces = net.interfaces()
     mymacs = [intf.ethaddr for intf in my_interfaces]
-    blasterIp=kwargs.blasterIp
-    num=kwargs.num
+    print(kwargs)
+    blasterIp,num=kwargs['blasterIp'],kwargs['num']
     while True:
         try:
             timestamp,dev,pkt = net.recv_packet()
