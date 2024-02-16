@@ -63,9 +63,9 @@ class Router(object):
         self.portsList=net.interfaces()
         self.ipList=[]
         self.macList=[]
-
         self.queue=[]
 
+    #generate forward table
     def generateTable(self):
         table=[]
         with open('forwarding_table.txt', 'r') as fd:
@@ -90,6 +90,7 @@ class Router(object):
             self.ipList.append(port.ipaddr)
             self.macList.append(port.ethaddr)
 
+    #generate arp request
     def sendArpPktRequest(self,tarIP,ifname):
         log_info(f'port={ifname,len(ifname)}\n')
         for port in self.portsList:
@@ -115,6 +116,7 @@ class Router(object):
         log_info(f'curport exist again:{curport.name,str(rePacket)}')
         self.net.send_packet(curport,rePacket)
 
+    #generate arp reply
     def sendArpPktReply(self,senderIP,senderhwaddr,tarIP,tarhwaddr,ifname):
         for port in self.portsList:
             if port.name==ifname:
@@ -138,6 +140,7 @@ class Router(object):
         log_info(f'sending arpReply packet={str(rePacket)}')
         self.net.send_packet(curport,rePacket)
 
+    #generate icmp echo reply
     def generateICMPReply(self,packet):
         i = ICMP()
         i.icmptype=ICMPType.EchoReply
@@ -156,6 +159,7 @@ class Router(object):
         # etHeader.dst=packet[Ethernet].src
         return etHeader+ipHeader+i   
     
+    #generate icmp error
     def generateICMPError(self,packet,errorType,errorCode):
         ipHeader=IPv4()
         #default upper protocol: ICMP
@@ -179,12 +183,14 @@ class Router(object):
 
         return etHeader+ipHeader+i        
 
+    #determine next hop ipaddr
     def get_target_ip(self,IPv4Header,targetIndex):
         if self.table[targetIndex].nextHop is None:
             return IPv4Header.dst
         else:
             return self.table[targetIndex].nextHop
 
+    #find the right item in forward table
     def lookup_foward_table(self,IPv4Header):
         tarIndex=-1
         maxMask=0
