@@ -13,13 +13,19 @@ senderWindow=0
 num=0
 blasteeIP=''
 length=0
+timeout=0
 # need some timer
-swTimer=null
+swTimer=0
 
 #0-> not sent
 #1-> sent but not acked
 #2-> acked 
 statusList=[]
+
+retranState=False
+retranPinter=-1
+retranTimes=0
+retranPktsNo=0
 
 def try_send(net):
     global lhs,rhs,senderWindow,statusList
@@ -44,7 +50,7 @@ def switchy_main(net,**kwargs):
     Args:
         net (_type_): _description_
     """
-    global lhs,rhs,senderWindow,num,blasteeIP,length
+    global lhs,rhs,senderWindow,num,blasteeIP,length,timeout
     my_intf = net.interfaces()
     mymacs = [intf.ethaddr for intf in my_intf]
     myips = [intf.ipaddr for intf in my_intf]
