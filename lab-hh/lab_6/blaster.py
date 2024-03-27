@@ -27,6 +27,10 @@ retranPinter=-1
 retranTimes=0
 retranPktsNo=0
 
+# try to send a packet regardless of whether received ack or not
+# case 1: in retransmission
+# case 2: sender window full, waiting ack
+# case 3: not full, send 1 pkt immediately
 def try_send(net):
     global lhs,rhs,senderWindow,statusList
     if rhs-lhs+1<=senderWindow:
