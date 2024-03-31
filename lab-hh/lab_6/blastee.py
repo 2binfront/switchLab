@@ -19,6 +19,7 @@ def switchy_main(net,**kwargs):
     """
     my_interfaces = net.interfaces()
     mymacs = [intf.ethaddr for intf in my_interfaces]
+    myips = [intf.ipaddr for intf in my_interfaces]
     print(kwargs)
     blasterIp,num=kwargs['blasterIp'],int(kwargs['num'])
     while True:
@@ -37,8 +38,8 @@ def switchy_main(net,**kwargs):
             
             seqAns=pkt[3].to_bytes()[0:4]
             payloadAns=pkt[3].to_bytes()[6:]
-            rePkt=Ethernet(src=dev.ethaddr,dst=pkt[Ethernet].src,ethertype=EtherType.IPv4)+\
-                IPv4(protocol=IPProtocol.UDP,src=dev.ipaddr,dst=blasterIp)+UDP()+\
+            rePkt=Ethernet(src=mymacs[0],dst=pkt[Ethernet].src,ethertype=EtherType.IPv4)+\
+                IPv4(protocol=IPProtocol.UDP,src=myips[0],dst=blasterIp)+UDP()+\
                 seqAns+payloadAns
             net.send_packet(dev,rePkt)
 

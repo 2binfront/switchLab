@@ -11,7 +11,7 @@ from time import time
 lhs,rhs=1,1
 senderWindow=0
 num=0
-blasteeIP=''
+blasteeIp=''
 length=0
 timeout=0
 
@@ -41,14 +41,14 @@ goodput=0
 
 
 def generatePkt(serialNo):
-    global length,blasteeIP
+    global length,blasteeIp
     pkt = Ethernet() + IPv4() + UDP()
     pkt[1].protocol = IPProtocol.UDP
     pkt+=serialNo.to_bytes(4,byteorder='big',signed=False)
     pkt+=length.to_bytes(2,byteorder='big',signed=False)
     pkt+=b'this is payload part'[0:length-1]
     pkt[Ethernet].dst=EthAddr('40:00:00:00:00:01')
-    pkt[IPv4].dst=IPv4Address(blasteeIP)
+    pkt[IPv4].dst=IPv4Address(blasteeIp)
     pkt[Ethernet].src=EthAddr(mymacs[0])
     pkt[IPv4].src=IPv4Address(myips[0])
     return pkt
@@ -73,10 +73,14 @@ def try_send(net):
                 pkt=generatePkt(retranPointer)
                 net.send_packet(my_intf[0],pkt)
                 reTX_nums+=1
+                retranPointer+=1
             else:
+                retranPointer+=1
                 continue
+        print('retransmit pkts over')
     if rhs-lhs+1<=senderWindow:
-        if statusList[rhs] and statusList[rhs]==0:
+        print('senderWindow satisfied')
+        if  statusList[rhs]==0:
             print('trying to send pkt')
             pkt=generatePkt(rhs)
             net.send_packet(my_intf[0],pkt)
@@ -84,10 +88,11 @@ def try_send(net):
 
     else:
         print('packet control mechanism has failed')
+        print(f'lhs={lhs},rhs={rhs},sw={senderWindow}')
     
 def switchy_main(net,**kwargs):
     """
-    blasteeIP: IP address of the blastee. This value has to match the IP address value in the start_mininet.py file
+    blasteeIp: IP address of the blastee. This value has to match the IP address value in the start_mininet.py file
     num: Number of packets to be sent by the blaster
     length: Length of the variable payload part of your packet in bytes, 0 ≤ length ≤ 65535
     senderWindow: Size of the sender window in packets
@@ -98,12 +103,13 @@ def switchy_main(net,**kwargs):
         net (_type_): _description_
     """
     start_time=time()
-    global lhs,rhs,senderWindow,num,blasteeIP,length,timeout,mymacs,myips,my_intf,statusList,latestAckedTimestamp
+    global lhs,rhs,senderWindow,num,blasteeIp,length,timeout,mymacs,myips,my_intf,statusList,latestAckedTimestamp
     global total_tx_time,reTX_nums,to_times,throughput,goodput
     my_intf = net.interfaces()
+    print(kwargs)
     mymacs = [intf.ethaddr for intf in my_intf]
     myips = [intf.ipaddr for intf in my_intf]
-    blasteeIP=IPv4Address(kwargs.blasteeIP)
+    blasteeIp=IPv4Address(kwargs['blasteeIp'])
     num=int(kwargs['num'])
     length=int(kwargs['length'])
     senderWindow=int(kwargs['senderWindow']) or 5
@@ -123,7 +129,9 @@ def switchy_main(net,**kwargs):
             log_debug("Got shutdown signal")
             break
         else:
-            ackSerial=int.from_bytes(pkt[RawPacketContents][:4],byteorder='big',signed=False)
+            payload=pkt[3]
+            payload=payload[:4]
+            ackSerial=int.from_bytes(payload,byteorder='big',signed=False)
             statusList[ackSerial]=2
             latestAckedTimestamp=time()
             while statusList[lhs]==2:

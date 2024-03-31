@@ -39,13 +39,13 @@ def switchy_main(net,**kwargs):
             If not, modify headers & send to blastee
             '''
             luck=random.random()
-            if luck <= kwargs.dropRate:
+            if luck <= float(kwargs['droprate']):
                 log_info(":( sorry to inform you that your packet was 'accidentlly' lost")
                 continue
             else:
                 log_info("U are a lucky basterd")
                 pkt[Ethernet].src,pkt[Ethernet].dst=net.interface_by_name("middlebox-eth1").ethaddr,EthAddr("20:00:00:00:00:01")
-                pkt[IPv4].ttl-=1
+                # pkt[IPv4].ttl-=1
                 net.send_packet("middlebox-eth1", pkt)
         elif dev == "middlebox-eth1":
             log_debug("Received from blastee")
@@ -55,7 +55,7 @@ def switchy_main(net,**kwargs):
             net.send_packet("middlebox-eth0", pkt)
             '''
             pkt[Ethernet].src,pkt[Ethernet].dst=net.interface_by_name("middlebox-eth0").ethaddr,EthAddr("10:00:00:00:00:01")
-            pkt[IPv4].ttl-=1
+            # pkt[IPv4].ttl-=1
             net.send_packet("middlebox-eth0", pkt)
         else:
             log_debug("Oops :))")
