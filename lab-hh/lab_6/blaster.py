@@ -4,7 +4,7 @@ from switchyard.lib.address import *
 from switchyard.lib.packet import *
 from switchyard.lib.userlib import *
 from random import randint
-import time
+from time import time
 
 #sender window >= rhs-lhs+1
 
@@ -14,36 +14,79 @@ num=0
 blasteeIP=''
 length=0
 timeout=0
-# need some timer
-swTimer=0
+
+# need some timer and other tools
+swTimestamp=0
+latestAckedTimestamp=0
+my_int=[]
+mymacs=[]
+myips=[]
 
 #0-> not sent
 #1-> sent but not acked
 #2-> acked 
 statusList=[]
+retranPointer=-1
 
-retranState=False
-retranPinter=-1
-retranTimes=0
-retranPktsNo=0
+#Total TX time (in seconds): Time between the first packet sent and last packet ACKd
+#Number of reTX: Number of retransmitted packets, this doesn't include the first transmission of a packet. Also if the same packet is retransmitted more than once, all of them will count
+#Number of coarse TOs: Number of coarse timeouts
+#Throughput (Bps): You will obtain this value by dividing the total # of sent bytes(from blaster to blastee) by total TX time. This will include all the retransmissions as well! When calculating the bytes, only consider the length of the variable length payload!
+#Goodput (Bps): You will obtain this value by dividing the total # of sent bytes(from blaster to blastee) by total TX time. However, this will NOT include the bytes sent due to retransmissions! When calculating the bytes, only consider the length of the variable length payload!
+total_tx_time=0
+reTX_nums=0
+to_times=0
+throughput=0
+goodput=0
+
+
+def generatePkt(serialNo):
+    global length,blasteeIP
+    pkt = Ethernet() + IPv4() + UDP()
+    pkt[1].protocol = IPProtocol.UDP
+    pkt+=serialNo.to_bytes(4,byteorder='big',signed=False)
+    pkt+=length.to_bytes(2,byteorder='big',signed=False)
+    pkt+=b'this is payload part'[0:length-1]
+    pkt[Ethernet].dst=EthAddr('40:00:00:00:00:01')
+    pkt[IPv4].dst=IPv4Address(blasteeIP)
+    pkt[Ethernet].src=EthAddr(mymacs[0])
+    pkt[IPv4].src=IPv4Address(myips[0])
+    return pkt
+
 
 # try to send a packet regardless of whether received ack or not
-# case 1: in retransmission
-# case 2: sender window full, waiting ack
+## case 1: in retransmission
+# case 2: sender window full, waiting ack, just continue
 # case 3: not full, send 1 pkt immediately
 def try_send(net):
-    global lhs,rhs,senderWindow,statusList
+    global lhs,rhs,senderWindow,statusList,timeout,swTimestamp,latestAckedTimestamp,my_intf
+    global reTX_nums,to_times
+    if swTimestamp==0:
+        swTimestamp=time()
+    if swTimestamp-latestAckedTimestamp>timeout:
+        print('trying to retransmit pkts')
+        to_times+=1
+        latestAckedTimestamp=time()
+        retranPointer=lhs
+        while retranPointer<=rhs:
+            if statusList[retranPointer]==1:
+                pkt=generatePkt(retranPointer)
+                net.send_packet(my_intf[0],pkt)
+                reTX_nums+=1
+            else:
+                continue
     if rhs-lhs+1<=senderWindow:
-        if not statusList[rhs]:
+        if statusList[rhs] and statusList[rhs]==0:
             print('trying to send pkt')
-            newpkt = Ethernet() + IPv4() + UDP()
-            newpkt[1].protocol =IPProtocol.UDP
+            pkt=generatePkt(rhs)
+            net.send_packet(my_intf[0],pkt)
+            rhs+=1
+
     else:
         print('packet control mechanism has failed')
     
 def switchy_main(net,**kwargs):
     """
-
     blasteeIP: IP address of the blastee. This value has to match the IP address value in the start_mininet.py file
     num: Number of packets to be sent by the blaster
     length: Length of the variable payload part of your packet in bytes, 0 ≤ length ≤ 65535
@@ -54,7 +97,9 @@ def switchy_main(net,**kwargs):
     Args:
         net (_type_): _description_
     """
-    global lhs,rhs,senderWindow,num,blasteeIP,length,timeout
+    start_time=time()
+    global lhs,rhs,senderWindow,num,blasteeIP,length,timeout,mymacs,myips,my_intf,statusList,latestAckedTimestamp
+    global total_tx_time,reTX_nums,to_times,throughput,goodput
     my_intf = net.interfaces()
     mymacs = [intf.ethaddr for intf in my_intf]
     myips = [intf.ipaddr for intf in my_intf]
@@ -64,36 +109,38 @@ def switchy_main(net,**kwargs):
     senderWindow=int(kwargs['senderWindow']) or 5
     timeout=int(kwargs['timeout'])
     recvTimeout=int(kwargs['recvTimeout']) or 0.15
-
+    statusList=[0 for i in range(num+1)]
     try_send(net)
     while True:
-        gotpkt = True
         try:
             #Timeout value will be parameterized!
             # timestamp,dev,pkt = net.recv_packet(timeout=0.15)
-            timestamp,dev,pkt = net.recv_packet(timeout=recvTimeout)
+            timestamp,dev,pkt = net.recv_packet(timeout=recvTimeout/1000)
         except NoPackets:
             log_debug("No packets available in recv_packet")
             try_send(net)
-            gotpkt = False
         except Shutdown:
             log_debug("Got shutdown signal")
             break
         else:
+            ackSerial=int.from_bytes(pkt[RawPacketContents][:4],byteorder='big',signed=False)
+            statusList[ackSerial]=2
+            latestAckedTimestamp=time()
+            while statusList[lhs]==2:
+                lhs+=1
+            if lhs==num:
+                break
+            try_send(net)
+    end_time=time()
+    total_tx_time=end_time-start_time
+    throughput=(reTX_nums+num)*length/total_tx_time
+    goodput=(num)*length/total_tx_time
 
-            if gotpkt:
-                log_debug("I got a packet")
-            else:
-                log_debug("Didn't receive anything")
+    print('Total TX time:',total_tx_time)
+    print('Number of reTX:',reTX_nums)
+    print('Number of coarse TOs:',to_times)
+    print('Throughput (Bps):',throughput)
+    print('Goodput (Bps):',goodput)
 
-            '''
-            Creating the headers for the packet
-            '''
-            newpkt = Ethernet() + IPv4() + UDP()
-            newpkt[1].protocol = IPProtocol.UDP
-
-            '''
-            Do other things here and send packet
-            '''
 
     net.shutdown()
