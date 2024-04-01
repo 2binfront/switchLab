@@ -46,7 +46,7 @@ def generatePkt(serialNo):
     pkt[1].protocol = IPProtocol.UDP
     pkt+=serialNo.to_bytes(4,byteorder='big',signed=False)
     pkt+=length.to_bytes(2,byteorder='big',signed=False)
-    pkt+=b'this is payload part'[0:length-1]
+    pkt+='this is payload part'.ljust(length, '.').encode()
     pkt[Ethernet].dst=EthAddr('40:00:00:00:00:01')
     pkt[IPv4].dst=IPv4Address(blasteeIp)
     pkt[Ethernet].src=EthAddr(mymacs[0])
@@ -63,7 +63,7 @@ def try_send(net):
     global reTX_nums,to_times
     if swTimestamp==0:
         swTimestamp=time()
-    if swTimestamp-latestAckedTimestamp>timeout:
+    if (swTimestamp-latestAckedTimestamp)*1000>timeout:
         print('trying to retransmit pkts')
         to_times+=1
         latestAckedTimestamp=time()
@@ -78,7 +78,7 @@ def try_send(net):
                 retranPointer+=1
                 continue
         print('retransmit pkts over')
-    if rhs-lhs+1<=senderWindow:
+    if rhs-lhs+1<senderWindow:
         print('senderWindow satisfied')
         if  statusList[rhs]==0:
             print('trying to send pkt')
@@ -130,7 +130,7 @@ def switchy_main(net,**kwargs):
             break
         else:
             payload=pkt[3]
-            payload=payload[:4]
+            payload=payload.to_bytes()[:4]
             ackSerial=int.from_bytes(payload,byteorder='big',signed=False)
             statusList[ackSerial]=2
             latestAckedTimestamp=time()

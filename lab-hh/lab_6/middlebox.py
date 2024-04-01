@@ -20,19 +20,20 @@ def switchy_main(net,**kwargs):
         gotpkt = True
         try:
             timestamp,dev,pkt = net.recv_packet()
-            log_debug("Device is {}".format(dev))
+            gotpkt = True
+            log_info("Device is {}".format(dev))
         except NoPackets:
-            log_debug("No packets available in recv_packet")
+            log_info("No packets available in recv_packet")
             gotpkt = False
         except Shutdown:
-            log_debug("Got shutdown signal")
+            log_info("Got shutdown signal")
             break
 
         if gotpkt:
-            log_debug("I got a packet {}".format(pkt))
+            log_info("I got a packet {}".format(pkt))
 
         if dev == "middlebox-eth0":
-            log_debug("Received from blaster")
+            print("Received from blaster,num=",int.from_bytes(pkt[3].to_bytes()[:4],'big'))
             '''
             Received data packet
             Should I drop it?
@@ -48,7 +49,7 @@ def switchy_main(net,**kwargs):
                 # pkt[IPv4].ttl-=1
                 net.send_packet("middlebox-eth1", pkt)
         elif dev == "middlebox-eth1":
-            log_debug("Received from blastee")
+            print("Received from blastee,num=",int.from_bytes(pkt[3].to_bytes()[:4],'big'))
             '''
             Received ACK
             Modify headers & send to blaster. Not dropping ACK packets!
@@ -58,6 +59,6 @@ def switchy_main(net,**kwargs):
             # pkt[IPv4].ttl-=1
             net.send_packet("middlebox-eth0", pkt)
         else:
-            log_debug("Oops :))")
+            log_info("Oops :))")
 
     net.shutdown()
