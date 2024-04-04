@@ -21,16 +21,16 @@ def switchy_main(net,**kwargs):
         try:
             timestamp,dev,pkt = net.recv_packet()
             gotpkt = True
-            log_info("Device is {}".format(dev))
+            # log_info("Device is {}".format(dev))
         except NoPackets:
-            log_info("No packets available in recv_packet")
+            # log_info("No packets available in recv_packet")
             gotpkt = False
         except Shutdown:
             log_info("Got shutdown signal")
             break
 
-        if gotpkt:
-            log_info("I got a packet {}".format(pkt))
+        # if gotpkt:
+            # log_info("I got a packet {}".format(pkt))
 
         if dev == "middlebox-eth0":
             print("Received from blaster,num=",int.from_bytes(pkt[3].to_bytes()[:4],'big'))
@@ -52,7 +52,7 @@ def switchy_main(net,**kwargs):
             print("Received from blastee,num=",int.from_bytes(pkt[3].to_bytes()[:4],'big'))
             '''
             Received ACK
-            Modify headers & send to blaster. Not dropping ACK packets!
+            Modify headers & send to blaster. Don't dropping ACK packets!
             net.send_packet("middlebox-eth0", pkt)
             '''
             pkt[Ethernet].src,pkt[Ethernet].dst=net.interface_by_name("middlebox-eth0").ethaddr,EthAddr("10:00:00:00:00:01")

@@ -16,8 +16,8 @@ length=0
 timeout=0
 
 # need some timer and other tools
-swTimestamp=0
-latestAckedTimestamp=0
+swTimestamp=time()
+latestAckedTimestamp=time()
 my_int=[]
 mymacs=[]
 myips=[]
@@ -26,7 +26,7 @@ myips=[]
 #1-> sent but not acked
 #2-> acked 
 statusList=[]
-retranPointer=-1
+retranPointer=0
 
 #Total TX time (in seconds): Time between the first packet sent and last packet ACKd
 #Number of reTX: Number of retransmitted packets, this doesn't include the first transmission of a packet. Also if the same packet is retransmitted more than once, all of them will count
@@ -60,35 +60,46 @@ def generatePkt(serialNo):
 # case 3: not full, send 1 pkt immediately
 def try_send(net):
     global lhs,rhs,senderWindow,statusList,timeout,swTimestamp,latestAckedTimestamp,my_intf
-    global reTX_nums,to_times
-    if swTimestamp==0:
-        swTimestamp=time()
-    if (swTimestamp-latestAckedTimestamp)*1000>timeout:
-        print('trying to retransmit pkts')
+    global reTX_nums,to_times,retranPointer
+    swTimestamp=time()
+    # one time retran one pkt
+    if retranPointer!=0:
         to_times+=1
-        latestAckedTimestamp=time()
+        # latestAckedTimestamp=time()
+        print(f'in retransmit {lhs,rhs} retranPointer={retranPointer},status={statusList[retranPointer]}')
+        if statusList[retranPointer]==1:
+            pkt=generatePkt(retranPointer)
+            net.send_packet(my_intf[0],pkt)
+            print(f'retraned {retranPointer}')
+            reTX_nums+=1
+        retranPointer+=1
+        if retranPointer>rhs:
+            retranPointer=0
+            print('retransmit pkts over')
+    elif (swTimestamp-latestAckedTimestamp)*1000>timeout:
+        print('initiallly trying to retransmit pkts',lhs)
         retranPointer=lhs
-        while retranPointer<=rhs:
-            if statusList[retranPointer]==1:
+        if statusList[retranPointer]==1:
                 pkt=generatePkt(retranPointer)
                 net.send_packet(my_intf[0],pkt)
                 reTX_nums+=1
                 retranPointer+=1
-            else:
-                retranPointer+=1
-                continue
-        print('retransmit pkts over')
-    if rhs-lhs+1<senderWindow:
-        print('senderWindow satisfied')
-        if  statusList[rhs]==0:
-            print('trying to send pkt')
-            pkt=generatePkt(rhs)
-            net.send_packet(my_intf[0],pkt)
-            rhs+=1
-
     else:
-        print('packet control mechanism has failed')
-        print(f'lhs={lhs},rhs={rhs},sw={senderWindow}')
+        if rhs-lhs+1<senderWindow:
+            print('senderWindow satisfied')
+
+            if  statusList[rhs]==0:
+                print('trying to send pkt',rhs)
+                pkt=generatePkt(rhs)
+                net.send_packet(my_intf[0],pkt)
+                statusList[rhs]=1
+                rhs+=1
+                if rhs>num:
+                    rhs=num
+                    print('rhs meets the end')
+        else:
+            print(f'waitting,curTime={swTimestamp-latestAckedTimestamp},timeout={timeout}')
+            print(f'lhs={lhs},rhs={rhs},sw={senderWindow}')
     
 def switchy_main(net,**kwargs):
     """
@@ -134,9 +145,13 @@ def switchy_main(net,**kwargs):
             ackSerial=int.from_bytes(payload,byteorder='big',signed=False)
             statusList[ackSerial]=2
             latestAckedTimestamp=time()
-            while statusList[lhs]==2:
-                lhs+=1
-            if lhs==num:
+            print(f'acked num={ackSerial},lhs={lhs},rhs={rhs}')
+            while lhs<=num:
+                if statusList[lhs]==2:
+                    lhs+=1
+                else:
+                    break
+            if  lhs>num:
                 break
             try_send(net)
     end_time=time()
@@ -149,6 +164,7 @@ def switchy_main(net,**kwargs):
     print('Number of coarse TOs:',to_times)
     print('Throughput (Bps):',throughput)
     print('Goodput (Bps):',goodput)
+    print(f'statusList looks like {statusList}')
 
 
     net.shutdown()

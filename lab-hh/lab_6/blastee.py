@@ -25,7 +25,7 @@ def switchy_main(net,**kwargs):
     while True:
         try:
             timestamp,dev,pkt = net.recv_packet()
-            log_info("Device is {}".format(dev))
+            # log_info("Device is {}".format(dev))
         except NoPackets:
             log_info("No packets available in recv_packet")
             continue
@@ -33,8 +33,7 @@ def switchy_main(net,**kwargs):
             log_info("Got shutdown signal")
             break
         else:
-            log_info("I got a packet from {}".format(dev))
-            print("Pkt num=",int.from_bytes(pkt[3].to_bytes()[:4],'big'))
+            print("ACK num=",int.from_bytes(pkt[3].to_bytes()[:4],'big'))
             
             seqAns=pkt[3].to_bytes()[0:4]
             payloadAns=pkt[3].to_bytes()[6:]
